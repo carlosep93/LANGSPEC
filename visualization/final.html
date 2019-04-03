@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<script src="https://d3js.org/d3.v3.min.js"></script>
+<script src="tsne.js"></script>
+<script src="https://code.jquery.com/jquery-1.12.4.js"></script>
+<script src="https://code.jquery.com/ui/1.12.1/jquery-ui.js"></script>  
+
+<div id ="mainDiv" style = "font-family: Arial, Helvetica, sans-serif;display: block; min-width: 1000px; margin:auto; width: 100%;">
+	
+	<div id="toolPanel" style = "position: absolute; z-index: 9; width:500px; background-color: #f1f1f1; border: 1px solid #d3d3d3; cursor: move;">  
+  		<div id="draggablePanel" style = "padding-left:4px; background-color: #2196F3; color: #fff;display: grid; grid-template-columns: 1fr 1fr;height: 18px">  
+  			<div style="grid-column: 1 / 2;">
+  				Control Panel
+  			</div>
+  			<div style="grid-column: 2 / 2;">
+  				<img src="images/minimize.png" height="18" width="18" onclick="togglePanel()" style="float: right; cursor: pointer;">
+  			</div>
+  		</div>
+  		<div id = "panel">
+	  		<div style="padding: 10px;display: grid; grid-template-columns: 1fr; ">
+		  		<div style="width:100%; grid-column: 1 / 1;">
+		  			<div id ="tsneControls">		  		
+						<label style ="float: left;">Number of steps:</label><br>
+						<input type="number" id="step" value = "250" style ="width:98%"><br>
+			  			<label style ="float: left; ">Perplexity:</label><br> 	
+						<label>10%</label><label style="float:right;">100%</label>
+						<input type="range" min="10" max="100" value="50" id="perplexity" style = "
+						vertical-align: middle;width:100%;">				
+					</div>
+					<div style ="display: grid; grid-template-columns: 1fr 1fr;">
+						<div style="grid-column: 1 / 2; float: left;">
+							<label style ="float: left; ">Tags:</label><br>  				
+							<input type="checkbox" id="tagAll" name="tagAll" onchange="checkBoxChanged(this)">
+				    		<label for="tagAll">All</label>
+				    		<input type="checkbox" id="tagSelected" name="tagSelected" onchange="checkBoxChanged(this)">
+				    		<label for="tagSelected">Selected</label><br>
+				    		<div style="display: inline-block; width: 100%; margin-top: 10px">    	    	             
+	    						<input type ="button" value ="Unselect All" onclick="clearSelection()" style ="float: left; width:100px">
+	    					</div>
+
+				    	</div>
+				    	<div style="grid-column: 2 / 2; float: right; ">
+				    		<div style="float: right;">
+					    		<label style ="float: left; ">Lines:</label><br>  				
+					    		<input type="checkbox" id="lineAll" name="lineAll" onchange="checkBoxChanged(this)">
+					    		<label for="tagAll">All</label>
+					    		<input type="checkbox" id="lineSelected" name="lineSelected" onchange="checkBoxChanged(this)">
+					    		<label for="tagSelected">Selected</label><br>
+					    		<div style="display: inline-block; width: 100%; margin-top: 10px">    	    	             
+		    						<input type ="button" value ="Redraw" onclick="processData(jsonDataPrevious)" onchange="processData(jsonDataPrevious)" style ="float: right;width:100px">
+		    					</div>
+					    	</div>
+				    	</div>
+			    	</div>
+		  		</div>
+	  		</div> 	  	
+	  		<br><br>
+	  		<div id = "dataDetail" style = "vertical-align:top;min-width: 500px">
+				<svg id = "dataDetailSVG" width="90%" height="450" style = "border-style: inset; border-color: gray; border-width: 2px; background-color: white; width: -webkit-fill-available; margin: 10px;">
+			</svg>
+		</div>
+	</div>
+	</div>
+
+
+	<div id = "mainGraph" style = "min-width: 500px">
+		<svg id = "mainGraphSVG" style = "margin-right:1%; margin-left: 1%; width:96%; height:98%; position:absolute; border-style: inset; border-color: gray; border-width: 2px;background-color: white;">
+	  
+		</svg>	
+	</div>
+	
+
+</div>
+<script>
+
+$(document).ready(function() {
+	$(function() { $('#toolPanel').draggable(); });	
+});
+
+/*
+green:#158e2d
+red:#f44d44
+blue:#0c45ff
+*/
+var Y = [];
+var finalPosition = [];
+var fileName = "";
+var radius = 10,
+color1 = '#f44d44', //LAN 1
+color1_2 = '#2ca25f',
+color2 = '#158e2d', //LAN 2
+color2_2 = '#d95f0e'
+color3 = '#0053ff'; //TAG
+var panelEnabled = true;
+togglePanel(); //control panel closed by default
+
+//disable tool panel on startup
+document.getElementById('toolPanel').style.display = "none";
+
+function togglePanel(){
+	var panel = document.getElementById('panel');
+	if (panelEnabled){
+		d3.select(panel).style("display","none");
+		panelEnabled = false;
+	}
+	else{
+		d3.select(panel).style("display","block")
+		panelEnabled = true;
+	}
+}
+function clearSelection(){
+	var svgDetail = d3.select("#dataDetailSVG");
+	svgDetail.selectAll("rect")
+		.style('display', 'none')
+		.attr('sel', 'no');
+
+	svgDetail.selectAll('text')
+		.attr('sel', 'no');
+
+	var svgGraph = d3.select("#mainGraphSVG");
+	var circles = svgGraph.selectAll("circle")[0];
+
+	for (var i = 0; i < circles.length; ++i){
+		var c1 = d3.select(circles[i]);
+		if (c1.attr('fill') == color1_2){
+			c1.attr('fill', color1);
+		}else if (c1.attr('fill') == color2_2){
+			c1.attr('fill', color2);
+		}
+	}
+
+	svgGraph.selectAll("line").style('display', 'none');	
+	svgGraph.selectAll("text").style('display', 'none');
+	var textInfo = d3.select(document.getElementById('infoApp'));
+	textInfo.style('display', 'block');
+
+	var textInfo = d3.select(document.getElementById('f1Text'));
+	textInfo.style('display', 'block');
+
+	var textInfo = d3.select(document.getElementById('f2Text'));
+	textInfo.style('display', 'block');
+
+	var ts = document.getElementById('tagSelected');
+	var ta = document.getElementById('tagAll');
+	var ls = document.getElementById('lineSelected');
+	var la = document.getElementById('lineAll');
+	ta.checked = false;
+	ts.checked = false;
+	la.checked = false;
+	ls.checked = false;
+	
+}
+function textClickManager(t, circleClick){ //c_0 - c1_0 c2_0
+	var c1, c2;
+	if (circleClick){
+		c1 = d3.select(document.getElementById(t.replace('_','1_')));
+		c2 = d3.select(document.getElementById(t.replace('_','2_')));
+		
+		t = document.getElementById(t);
+	}else{
+		c1 = d3.select(document.getElementById(t.attributes.id.value.replace('_','1_')));
+		c2 = d3.select(document.getElementById(t.attributes.id.value.replace('_','2_')));		
+	}
+
+	if (c1.attr('fill') == color1){
+		c1.attr('fill', color1_2);
+		c2.attr('fill', color2_2);
+	}else{
+		c1.attr('fill', color1);
+		c2.attr('fill', color2);
+	}	
+
+	console.log(t);
+	var textSelection = d3.select(document.getElementById('r_'+ t.attributes.id.value));
+	if (t.attributes.sel.value == 'no'){
+		textSelection.style('display', 'block');
+		t.attributes.sel.value = 'yes';		
+	}else{
+		textSelection.style('display', 'none');
+		t.attributes.sel.value = 'no';
+	}
+	var selectedLineEnabled = document.getElementById('lineSelected').checked;	
+	var selectedTagEnabled = document.getElementById('tagSelected').checked;
+	var svgGraph = d3.select("#mainGraphSVG");
+	var svgDetail = d3.select("#dataDetailSVG");
+	if (!document.getElementById('lineAll').checked) svgGraph.selectAll("line").style('display', 'none');
+	if (!document.getElementById('tagAll').checked) svgGraph.selectAll("text").style('display', 'none');			
+	var rects = svgDetail.selectAll("rect")[0];
+	for (var i = 0; i < rects.length; i++){
+		if (rects[i].style.display == 'block'){
+			if (selectedLineEnabled){
+				var labelToActivate = rects[i].id.substring(4, rects[i].id.length)
+				d3.select(document.querySelector("[id='l_l_c1_"+ labelToActivate + "']"))
+					.style('display', 'block');
+				
+			}
+			if (selectedTagEnabled){
+				var labelToActivate = rects[i].id.substring(4, rects[i].id.length)
+				d3.select(document.querySelector("[id='l_c1_"+ labelToActivate + "']"))
+					.style('display', 'block');
+				d3.select(document.querySelector("[id='l_c2_"+ labelToActivate + "']"))
+					.style('display', 'block');			
+			}			
+		}
+	}	
+	var textInfo = d3.select(document.getElementById('infoApp'));
+	textInfo.style('display', 'block');
+
+	var textInfo = d3.select(document.getElementById('f1Text'));
+	textInfo.style('display', 'block');
+
+	var textInfo = d3.select(document.getElementById('f2Text'));
+	textInfo.style('display', 'block');
+}
+	
+function manageChecks(c){
+	var svgGraph = d3.select("#mainGraphSVG");
+	var svgDetail = d3.select("#dataDetailSVG");
+
+	if (c.id == 'lineAll' && c.checked )
+		svgGraph.selectAll("line").style('display', 'block');
+	if (c.id == 'lineAll' && !c.checked )
+		svgGraph.selectAll("line").style('display', 'none');
+	if (c.id == 'tagAll' && c.checked )
+		svgGraph.selectAll("text").style('display', 'block');
+	if (c.id == 'tagAll' && !c.checked )
+		svgGraph.selectAll("text").style('display', 'none');
+	if (c.id == 'tagSelected' && c.checked ){
+		svgGraph.selectAll("text").style('display', 'none');			
+		var rects = svgDetail.selectAll("rect")[0];
+		for (var i = 0; i < rects.length; i++){
+			if (rects[i].style.display == 'block'){
+				var labelToActivate = rects[i].id.substring(4, rects[i].id.length)
+				d3.select(document.querySelector("[id='l_c1_"+ labelToActivate + "']"))
+					.style('display', 'block');
+				d3.select(document.querySelector("[id='l_c2_"+ labelToActivate + "']"))
+					.style('display', 'block');
+			}
+		}
+	}
+	if (c.id == 'tagSelected' && !c.checked )
+		svgGraph.selectAll("text").style('display', 'none');		
+
+	if (c.id == 'lineSelected' && c.checked ){
+		svgGraph.selectAll("line").style('display', 'none');			
+		var rects = svgDetail.selectAll("rect")[0];
+		for (var i = 0; i < rects.length; i++){
+			if (rects[i].style.display == 'block'){
+				var labelToActivate = rects[i].id.substring(4, rects[i].id.length)
+				d3.select(document.querySelector("[id='l_l_c1_"+ labelToActivate + "']"))
+					.style('display', 'block');
+				
+			}
+		}
+	}
+	if (c.id == 'lineSelected' && !c.checked )
+		svgGraph.selectAll("line").style('display', 'none');	
+
+	var textInfo = d3.select(document.getElementById('infoApp'));
+	textInfo.style('display', 'block');
+
+	var textInfo = d3.select(document.getElementById('f1Text'));
+	textInfo.style('display', 'block');
+
+	var textInfo = d3.select(document.getElementById('f2Text'));
+	textInfo.style('display', 'block');
+}
+
+function checkBoxChanged(c){
+
+	var ts = document.getElementById('tagSelected');
+	var ta = document.getElementById('tagAll');
+	var ls = document.getElementById('lineSelected');
+	var la = document.getElementById('lineAll');
+	if (c == ts && ts.checked) ta.checked = false;
+	if (c == ta && ta.checked) ts.checked = false;
+	if (c == ls && ls.checked) la.checked = false;
+	if (c == la && la.checked) ls.checked = false;
+	manageChecks(c);
+	
+
+}
+
+var dropZone = document.getElementById('mainDiv');
+dropZone.addEventListener('dragover', dragOver);
+dropZone.addEventListener('dragend', dragEnd);
+dropZone.addEventListener('drop', readText, false);
+
+var dataDetail = document.getElementById('dataDetail');
+dataDetail.addEventListener('wheel', wheel);
+
+function normalizeDelta(wheelEvent) {
+    var delta = 0;
+    var wheelDelta = wheelEvent.wheelDelta;
+    var deltaY = wheelEvent.deltaY;
+    // CHROME WIN/MAC | SAFARI 7 MAC | OPERA WIN/MAC | EDGE
+    if (wheelDelta) {
+        delta = wheelDelta / 120; 
+    }
+    // FIREFOX WIN / MAC | IE
+    if(deltaY) {
+        deltaY > 0 ? delta = 1 : delta = -1;
+    }
+    return delta;
+}
+
+function wheel(e){
+
+ 	var g = d3.select("#dataDetailSVG").select("g");
+	var current_translate = d3.transform(g[0][0].attributes.transform.value).translate;
+	dx = current_translate[0];
+	dy = (normalizeDelta(e) * 40) + current_translate[1];
+	if (dy > -24) dy = current_translate[1];
+	g.attr("transform", "translate(" + [dx,dy] + ")");
+	e.stopPropagation();
+
+}
+
+function dragOver(e) {
+    e.stopPropagation(); // for some browsers stop redirecting
+    e.preventDefault();
+    return false;
+}
+ 
+function dragEnd(e) {
+    e.stopPropagation(); // for some browsers stop redirecting
+    e.preventDefault();
+    return false;
+}
+ 
+function readText(e) {
+    e.stopPropagation(); // for some browsers stop redirecting
+    e.preventDefault();
+ 
+    var fileReader,
+        files = e.dataTransfer.files;
+ 
+    if (!files) {
+        return;
+    }
+
+	fileName = files[0].name;
+    fileReader = new FileReader();
+ 
+	fileReader.addEventListener('loadend', dataToJSON);
+	
+	function dataToJSON(e2){
+		var data = JSON.parse(e2.currentTarget.result);
+		processData(data);
+
+	}
+
+    fileReader.readAsText(files[0]);
+    
+}
+
+var jsonDataPrevious;
+var tx=0, ty=0;
+var ss=1;
+
+function zoomHandler() {
+	tx = d3.event.translate[0];
+	ty = d3.event.translate[1];
+	ss = d3.event.scale;
+
+	var slt = document.getElementById('infoApp');
+	if (jsonDataPrevious['type'] == 'TSNE')
+		slt.innerHTML = "T-SNE DATA - FILE: " + fileName + " - ZOOM LEVEL "+ ss.toFixed(2) +"x";
+	else if (jsonDataPrevious['type'] == 'SMAP')
+		slt.innerHTML = "UMAP DATA - FILE: " + fileName + " - ZOOM LEVEL "+ ss.toFixed(2) +"x"
+
+	var circles = d3.selectAll("circle")[0];
+	for (var i = 0; i < circles.length; i++){
+		if (jsonDataPrevious['type'] == 'SMAP'){
+			var cx = finalPosition[circles[i].attributes.arrayPos.value][0] * 200 *ss + tx;
+			var cy = finalPosition[circles[i].attributes.arrayPos.value][1] * 200 *ss + ty;
+
+			d3.select(circles[i])
+				.attr("cx", cx)
+				.attr("cy", cy);
+		}else if (jsonDataPrevious['type'] == 'TSNE'){
+
+			var cx = Y[circles[i].attributes.arrayPos.value][0] * 200 *ss + tx;
+			var cy = Y[circles[i].attributes.arrayPos.value][1] * 200 *ss + ty;
+			
+			d3.select(circles[i])
+				.attr("cx", cx)
+				.attr("cy", cy);	
+		}else return;
+
+	}
+	var svgGraph = d3.select("#mainGraphSVG");
+	var labels = svgGraph.selectAll("text")[0];
+	var lines = svgGraph.selectAll("line")[0];
+	for (var i = 0; i < lines.length ; i++){
+		var x1 = d3.select("#"+lines[i].attributes.id.value.substr(4,lines[i].attributes.id.value.length)).attr("cx")
+		var x2 = d3.select("#"+d3.select("#"+lines[i].attributes.id.value.substr(4,lines[i].attributes.id.value.length)).attr("brother")).attr("cx")
+		var y1 = d3.select("#"+lines[i].attributes.id.value.substr(4,lines[i].attributes.id.value.length)).attr("cy")
+		var y2 = d3.select("#"+d3.select("#"+lines[i].attributes.id.value.substr(4,lines[i].attributes.id.value.length)).attr("brother")).attr("cy")
+		d3.select(lines[i])
+			.attr("x1", x1)
+			.attr("x2", x2)
+			.attr("y1", y1)
+			.attr("y2", y2);
+	}
+	
+	for (var i = 0; i < labels.length - 1; i++){
+		var x1 = d3.select("#"+lines[i].attributes.id.value.substr(4,lines[i].attributes.id.value.length)).attr("cx")		
+		var y1 = d3.select("#"+lines[i].attributes.id.value.substr(4,lines[i].attributes.id.value.length)).attr("cy")		
+		d3.select(labels[i])
+			.attr("x", x1)			
+			.attr("y", y1);
+	}
+	
+}
+
+
+function processData(jsonData){
+	jsonDataPrevious = jsonData;
+	finalPosition = [];
+	ss=1;
+
+	document.getElementById('toolPanel').style.display = "none";
+	detSVG = document.getElementById('dataDetailSVG');
+	detSVG.innerHTML = "";
+	graphSVG = document.getElementById('mainGraphSVG');
+	graphSVG.innerHTML = "";
+
+	for (var i = 0; i < jsonData.content.length; ++i){
+		jsonData.content[i].pos = i + 1;
+	}
+	var lineOffset = 80;
+	var svgDetail = d3.select("#dataDetailSVG");
+
+	svgDetail.append("g")
+		.attr("transform", "translate(10, -24)")		
+
+	g = svgDetail.select("g")
+		.selectAll("rect")
+		.data(jsonData.content)
+		.enter()
+		.append("rect")
+			.attr("id", function(d, i) { return 'r_c_'+i; })
+			.attr("x", 0)
+			.attr("y", function(d) { return (d.pos * lineOffset) - 10; })
+			.attr("width","2000")
+			.attr("height","60")
+			.attr("style","fill:rgb(100,100,100)");
+
+	svgDetail.selectAll("rect").style('display', 'none');
+
+	g = svgDetail.select("g")
+		.selectAll("text")
+		.data(jsonData.content)
+		.enter()
+		.append("text")
+			.attr("x", function(d) { return 10; })
+			.attr("y", function(d) { return d.pos * lineOffset; })
+			.attr("id", function(d, i) { return 'c_'+i;})
+			.attr("sel", "no")				
+			.attr("onclick", "textClickManager(this, false)")
+			.style("cursor","pointer")
+			.append('tspan')
+				.attr('x', 0)
+				.attr('dy', 5)
+				.attr('style', 'fill: '+color3)
+				.attr('onmouseover', function(d) { return 'showText("'+d.f1+'","'+d.f2+'")'; })
+				.attr('onmouseout', function(d) { return 'showText("","")'; })
+				.text(function(d, i) { return 'c_'+i; })
+			.append('tspan')
+				.attr('x', 0)
+				.attr('dy', 20)
+				.attr('style', 'fill: black')
+				.text(function(d) { return d.f1; })
+			.append('tspan')
+				.attr('x', 0)
+				.attr('dy', 20)
+				.attr('style', 'fill: black')
+				.text(function(d) { return d.f2; });
+
+	var svgGraph = d3.select("#mainGraphSVG");
+	
+	var zoomListener = d3.behavior.zoom()
+	      .scaleExtent([0.1, 10])
+	      .center([0,0])
+	      .on("zoom", zoomHandler);
+	zoomListener(svgGraph);
+
+	svgGraph.append("g")
+		.attr("transform", "translate("+ (svgGraph.style("width").replace("px", "") / 2 ) + ", "+ (svgGraph.style("height").replace("px", "") / 2 ) + ")");
+		
+	
+	var data = [];
+	var dataDraw = [];
+
+	for (var i = 0; i < jsonData.content.length; i++){
+
+		data.push(jsonData.content[i].weights_f1);
+		data.push(jsonData.content[i].weights_f2);
+		dataDraw.push({'color': color1, 'f1': jsonData.content[i].f1, 'f2': jsonData.content[i].f2, 'labelId': 'c_'+ i, 'tagId' : 'c_'+ i + '_1', 'block' : 'c_' + i, 'id' : 'c1_'+ i, 'brother' : 'c2_'+ i, 'arrayPos': i*2})
+		dataDraw.push({'color': color2, 'f1': jsonData.content[i].f1, 'f2': jsonData.content[i].f2, 'labelId': 'c_'+ i, 'tagId' : 'c_'+ i + '_1', 'block' : 'c_' + i, 'id' : 'c2_'+ i, 'brother' : 'c1_'+ i, 'arrayPos': (i*2)+1})
+	}
+
+	g = svgGraph.select("g")
+		.selectAll("circle")
+		.data(dataDraw)
+		.enter()
+		.append("rect")
+			.attr("cx", function(d, i) {return 0})
+	    	.attr("cy", function(d, i) {return 0})
+	    	.attr("r", function(d) {return 5})
+	    	.attr("id", function(d) {return d.id})
+	    	.attr('onmouseover', function(d) { return 'showText("'+d.f1+'","'+d.f2+'")'; })
+			.attr('onmouseout', function(d) { return 'showText("","")'; })
+	    	.attr("brother", function(d) {return d.brother})
+	    	.attr("arrayPos", function(d) {return d.arrayPos})
+	    	.attr("onclick", function(d) {return "textClickManager('"+d.labelId+"', true)"})
+	    	.attr("fill", function(d) {return d.color})
+	    	.style("cursor","pointer");
+
+	g = svgGraph.select("g")	    	
+		.selectAll("text")
+		.data(dataDraw)
+		.enter()
+    	.append("text")
+    		.attr("x", function(d) { return 0; })
+			.attr("y", function(d) { return 0; })
+			.attr("id", function(d) {return 'l_'+d.id})
+			.style("display", "none")
+			.text(function(d, i) { return d.block; });
+
+	g = svgGraph.select("g")	    	
+		.selectAll("line")
+		.data(dataDraw)
+		.enter()
+    	.append("line")
+    		.attr("x1", function(d) { return 0; })
+			.attr("y1", function(d) { return 0; })
+			.attr("x2", function(d) { return 20; })
+			.attr("y2", function(d) { return 20; })
+			.attr("id", function(d) {return 'l_l_'+d.id})
+			.style("display", "none")
+			.style("stroke", "black");
+			
+
+	if (jsonData['type'] == 'SMAP'){
+		document.getElementById("tsneControls").style.display = "none";
+		var transitionsFinished = 0;		
+		var circles = d3.selectAll("circle")[0];
+		var xMax = -10000000;
+		var xMin = 10000000;
+		var yMax = -10000000;
+		var yMin = 10000000;
+		for (var i = 0; i < circles.length; i++){
+			if (xMax < data[i][0]) xMax = data[i][0];
+			if (xMin > data[i][0]) xMin = data[i][0];
+			if (yMax < data[i][0]) yMax = data[i][1];
+			if (yMin > data[i][0]) yMin = data[i][1];
+		}
+		var centerX = (xMin + (xMax - xMin) / 2);
+		var centerY = (yMin + (yMax - yMin) / 2);		
+		for (var i = 0; i < circles.length; i++){
+			d3.select(circles[i])
+				.transition().call(endall, function() { transitionsFinished++; isTransFinished(transitionsFinished) })
+				.duration(2000)
+				.attr("cx", (data[i][0] - centerX) * 200 * ss + tx)
+				.attr("cy", (data[i][1] - centerY)* 200 * ss + ty);
+			finalPosition.push([data[i][0] - centerX, data[i][1] - centerY]);
+
+		}
+
+		var h = parseInt(svgGraph.style("height").replace("px", ""));
+		svgGraph.append("text")
+			.attr('x', 20)
+			.attr('y', h - 8)
+			.attr('id', 'infoApp')
+			.attr('font-size','35')
+			.attr('style','font-weight: bold')
+			.text("UMAP DATA - FILE: " + fileName + " - ZOOM LEVEL "+ ss.toFixed(2) +"x");
+		svgGraph.append("text")
+			.attr('x', 20)
+			.attr('y', h - 68)
+			.attr('id', 'f1Text')
+			.attr('font-size','10')
+			.attr('fill', color1_2)
+			.attr('style','font-weight: bold')
+			.text("");
+		svgGraph.append("text")
+			.attr('x', 20)
+			.attr('y', h - 48)
+			.attr('id', 'f2Text')
+			.attr('font-size','10')
+			.attr('fill', color2_2)
+			.attr('style','font-weight: bold')
+			.text("");
+		var labels = svgGraph.selectAll("text")[0];
+		var lines = svgGraph.selectAll("line")[0];
+
+		function isTransFinished(transitionsFinished){
+			for (var i = 0; i < lines.length; i++){
+				var brother = document.getElementById(circles[i].attributes.brother.value);;
+				var cx = circles[i].attributes.cx.value;
+				var cy = circles[i].attributes.cy.value;
+				var x2 =  brother.attributes.cx.value;
+				var y2 =  brother.attributes.cy.value;
+				if (i % 2 == 0)
+					d3.select(lines[i])
+						.transition()
+						.duration(200)
+						.attr("x1", cx)
+						.attr("y1", cy)
+						.attr("x2", x2)
+						.attr("y2", y2);
+
+				d3.select(labels[i])
+					.transition()
+					.duration(200)
+					.attr("x", cx)
+					.attr("y", cy);					
+    		}
+    		document.getElementById('toolPanel').style.display = "block";
+		}
+		function endall(transition, callback) { 
+		    if (typeof callback !== "function") throw new Error("Wrong callback in endall");
+		    if (transition.size() === 0) { callback() }
+		    var n = 0; 
+		    transition 
+		        .each(function() { ++n; }) 
+		        .each("end", function() { if (!--n) callback.apply(this, arguments); }); 
+		} 
+	    		
+				
+	}
+   	else if (jsonData['type'] == 'TSNE'){
+   		document.getElementById("tsneControls").style.display = "block";
+		var step = document.getElementById("step").value;
+		
+		svgGraph.append("text")
+			.attr('x', 20)
+			.attr('y', 40)
+			.attr('id', 'infoText')
+			.attr('font-size','35')
+			.attr('style','font-weight: bold')
+			.text("STEPS LEFT: " + step);
+
+		var h = parseInt(svgGraph.style("height").replace("px", ""));
+		svgGraph.append("text")
+			.attr('x', 20)
+			.attr('y', h - 8)
+			.attr('id', 'infoApp')
+			.attr('font-size','35')
+			.attr('style','font-weight: bold')
+			.text("T-SNE DATA - FILE: " + fileName + " - ZOOM LEVEL "+ ss.toFixed(2) +"x");
+		svgGraph.append("text")
+			.attr('x', 20)
+			.attr('y', h - 68)
+			.attr('id', 'f1Text')
+			.attr('font-size','10')
+			.attr('fill', color1_2)
+			.attr('style','font-weight: bold')
+			.text("");
+		svgGraph.append("text")
+			.attr('x', 20)
+			.attr('y', h - 48)
+			.attr('id', 'f2Text')
+			.attr('font-size','10')
+			.attr('fill', color2_2)
+			.attr('style','font-weight: bold')
+			.text("");
+		var circles = d3.selectAll("circle")[0];
+		var labels = svgGraph.selectAll("text")[0];
+		var lines = svgGraph.selectAll("line")[0];
+
+		var opt = {epsilon: 10, perplexity : (document.getElementById('perplexity').value / 100) * data.length}; // epsilon is learning rate (10 = default)
+		var tsne = new tsnejs.tSNE(opt); // create a tSNE instance
+		 
+		// initialize data.
+		
+		tsne.initDataDist(data);
+
+		
+		var transitionsFinished = 0;
+
+		runner = setInterval(drawFrame, 0);
+
+		function isTransFinished(transitionsFinished){
+			if (transitionsFinished == Y.length){
+				for (var i = 0; i < lines.length; i++){
+					var brother = document.getElementById(circles[i].attributes.brother.value);;
+					var cx = circles[i].attributes.cx.value;
+					var cy = circles[i].attributes.cy.value;
+					var x2 =  brother.attributes.cx.value;
+					var y2 =  brother.attributes.cy.value;
+					if (i % 2 == 0)
+						d3.select(lines[i])
+							.transition()
+							.duration(200)
+							.attr("x1", cx)
+							.attr("y1", cy)
+							.attr("x2", x2)
+							.attr("y2", y2);
+
+					d3.select(labels[i])
+						.transition()
+						.duration(200)
+						.attr("x", cx)
+						.attr("y", cy);					
+	    		}
+	    		document.getElementById('toolPanel').style.display = "block";
+	    		var slt = document.getElementById('infoText');
+				slt.innerHTML = '';
+			}
+		}
+		function endall(transition, callback) { 
+		    if (typeof callback !== "function") throw new Error("Wrong callback in endall");
+		    if (transition.size() === 0) { callback() }
+		    var n = 0; 
+		    transition 
+		        .each(function() { ++n; }) 
+		        .each("end", function() { if (!--n) callback.apply(this, arguments); }); 
+		} 
+
+		function drawFrame(){
+			tsne.step(); // every time you call this, solution gets better
+			Y = tsne.getSolution(); 
+
+			for (var i = 0; i < circles.length; i++){
+				var cx = Y[circles[i].attributes.arrayPos.value][0] * 200 *ss + tx;
+				var cy = Y[circles[i].attributes.arrayPos.value][1] * 200 *ss + ty;
+						
+				d3.select(circles[i])
+					.transition().call(endall, function() { transitionsFinished++; isTransFinished(transitionsFinished) })
+					.duration(200)
+					.attr("cx", cx)
+					.attr("cy", cy);	
+
+			}
+
+			step--;
+			if(step > 0){
+				tsne.step();
+				var slt = document.getElementById('infoText');
+				slt.innerHTML = 'STEPS LEFT: '+step;
+			}
+	    	else{
+	    		clearInterval(runner);
+	    		
+	    	} 
+
+		}
+	}
+
+
+}	
+
+function showText(f1, f2){
+	d3.select(document.getElementById('f1Text'))
+		.text(f1);
+	d3.select(document.getElementById('f2Text'))
+		.text(f2);
+}
+</script>
