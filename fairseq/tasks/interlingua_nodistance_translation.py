@@ -20,8 +20,8 @@ from fairseq.models import FairseqMultiModel
 from . import FairseqTask, register_task
 
 
-@register_task('multilingual_translation')
-class MultilingualTranslationTask(FairseqTask):
+@register_task('interlingua_nodistance_translation')
+class InterlinguaNoDistanceTranslationTask(FairseqTask):
     """A task for training multiple translation models simultaneously.
 
     We iterate round-robin over batches from multiple language pairs, ordered
@@ -64,15 +64,19 @@ class MultilingualTranslationTask(FairseqTask):
                             help='max number of tokens in the source sequence')
         parser.add_argument('--max-target-positions', default=1024, type=int, metavar='N',
                             help='max number of tokens in the target sequence')
+        parser.add_argument('--freeze-schedule', default=None, metavar='PAIRS',
+                            help='comma-separated list of freeze or non freeze modules in training order')
 
     def __init__(self, args, dicts, training):
         super().__init__(args)
         self.dicts = dicts
         self.langs = list(dicts.keys())
         self.training = training
+        self.num_updates = 0
 
     @classmethod
     def setup_task(cls, args, **kwargs):
+        args.freeze_schedule = args.freeze_schedule.split(',')
         args.left_pad_source = options.eval_bool(args.left_pad_source)
         args.left_pad_target = options.eval_bool(args.left_pad_target)
 
@@ -164,6 +168,10 @@ class MultilingualTranslationTask(FairseqTask):
             eval_key=None if self.training else self.args.lang_pairs[0],
         )
 
+        print('**************************')
+        print(self.args.lang_pairs)
+        print('**************************')
+
     def build_dataset(self, tokens, lengths, src_dict):
         lang_pair = "%s-%s" % (self.args.source_lang, self.args.target_lang)
         return RoundRobinZipDatasets(
@@ -180,10 +188,19 @@ class MultilingualTranslationTask(FairseqTask):
             raise ValueError('MultilingualTranslationTask requires a FairseqMultiModel architecture')
         return model
 
-    def train_step(self, sample, model, criterion, optimizer, ignore_grad=False):
+    def train_step(self, sample, model, criterion, optimizer,ignore_grad=False):
         model.train()
         agg_loss, agg_sample_size, agg_logging_output = 0., 0., {}
-        for lang_pair in self.args.lang_pairs:
+        for i,lang_pair in enumerate(self.args.lang_pairs):
+            schedule = self.args.freeze_schedule[i].split('-')
+
+            #freeze encoder if required by schedule
+            if schedule[0] == 'f':
+                model.models[lang_pair].encoder.eval()
+            #freeze decoder if required by schedule
+            if schedule[1] == 'f':
+                model.models[lang_pair].decoder.eval()
+
             if sample[lang_pair] is None or len(sample[lang_pair]) == 0:
                 continue
             loss, sample_size, logging_output = criterion(model.models[lang_pair], sample[lang_pair])

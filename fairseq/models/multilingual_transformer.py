@@ -9,6 +9,7 @@ from collections import OrderedDict
 
 from fairseq import utils
 from fairseq.tasks.multilingual_translation import MultilingualTranslationTask
+from fairseq.tasks.interlingua_nodistance_translation import InterlinguaNoDistanceTranslationTask
 
 from . import FairseqMultiModel, register_model, register_model_architecture
 
@@ -57,7 +58,7 @@ class MultilingualTransformerModel(FairseqMultiModel):
     @classmethod
     def build_model(cls, args, task):
         """Build a new model instance."""
-        assert isinstance(task, MultilingualTranslationTask)
+        assert isinstance(task, MultilingualTranslationTask) or isinstance(task,InterlinguaNoDistanceTranslationTask)
 
         # make sure all arguments are present in older models
         base_multilingual_architecture(args)
