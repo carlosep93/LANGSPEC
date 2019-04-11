@@ -58,7 +58,7 @@ class InterlinguaTransformerModel(FairseqInterlinguaModel):
     @classmethod
     def build_model(cls, args, task):
         """Build a new model instance."""
-        assert isinstance(task, InterlinguaTranslationTask) or isinstance(task, DistInterlinguaTranslationTask)
+        #assert isinstance(task, InterlinguaTranslationTask) or isinstance(task, DistInterlinguaTranslationTask)
 
         # make sure all arguments are present in older models
         base_interlingua_architecture(args)

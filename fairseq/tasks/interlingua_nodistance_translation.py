@@ -15,7 +15,7 @@ from fairseq.data import (
     Dictionary, LanguagePairDataset, IndexedInMemoryDataset,
     IndexedRawTextDataset, RoundRobinZipDatasets,
 )
-from fairseq.models import FairseqMultiModel
+from fairseq.models.fairseq_model import FairseqInterlinguaModel
 
 from . import FairseqTask, register_task
 
@@ -66,6 +66,8 @@ class InterlinguaNoDistanceTranslationTask(FairseqTask):
                             help='max number of tokens in the target sequence')
         parser.add_argument('--freeze-schedule', default=None, metavar='PAIRS',
                             help='comma-separated list of freeze or non freeze modules in training order')
+        parser.add_argument('--auto-encoding', default='False', type=str, metavar='BOOL',
+                            help='use autoencoders during training')
 
     def __init__(self, args, dicts, training):
         super().__init__(args)
@@ -73,6 +75,7 @@ class InterlinguaNoDistanceTranslationTask(FairseqTask):
         self.langs = list(dicts.keys())
         self.training = training
         self.num_updates = 0
+        self.auto = args.auto_encoding == 'True'
 
     @classmethod
     def setup_task(cls, args, **kwargs):
@@ -184,8 +187,8 @@ class InterlinguaNoDistanceTranslationTask(FairseqTask):
     def build_model(self, args):
         from fairseq import models
         model = models.build_model(args, self)
-        if not isinstance(model, FairseqMultiModel):
-            raise ValueError('MultilingualTranslationTask requires a FairseqMultiModel architecture')
+        if not isinstance(model, FairseqInterlinguaModel):
+            raise ValueError('InterlinguaNoDistanceTranslationTask requires a FairseqInterlinguaModel architecture')
         return model
 
     def train_step(self, sample, model, criterion, optimizer,ignore_grad=False):
