@@ -295,10 +295,11 @@ class FairseqInterlinguaModel(BaseFairseqModel):
             key: FairseqModel(encoders[key.split('-')[0]], decoders[key.split('-')[1]])
             for key in self.keys
         })
-
+        '''
         self.devices = OrderedDict()
         for i,k in enumerate(sorted(encoders.keys())):
             self.devices[k] = 'cuda:' + str(i) if torch.cuda.device_count() > 1 else 'gpu:0'
+        '''
 
     def forward(self, src_tokens, src_lengths, prev_output_tokens):
         '''

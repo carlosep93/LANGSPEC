@@ -191,18 +191,39 @@ class InterlinguaNoDistanceTranslationTask(FairseqTask):
             raise ValueError('InterlinguaNoDistanceTranslationTask requires a FairseqInterlinguaModel architecture')
         return model
 
+
+    def freeze_module(self,model,lang_pair,schedule):
+        #freeze encoder if required by schedule
+        if schedule[0] == 'f':
+            model.models[lang_pair].encoder.eval()
+            for p in model.models[lang_pair].encoder.parameters():
+                p.requires_grad = False
+        #freeze decoder if required by schedule
+        if schedule[1] == 'f':
+            model.models[lang_pair].decoder.eval()
+            for p in  model.models[lang_pair].decoder.parameters():
+                p.requires_grad = False
+        return model
+
+    def unfreeze_module(self,model,lang_pair,schedule):
+        #freeze encoder if required by schedule
+        if schedule[0] == 'f':
+            model.models[lang_pair].encoder.train()
+            for p in model.models[lang_pair].encoder.parameters():
+                p.requires_grad = True
+        #freeze decoder if required by schedule
+        if schedule[1] == 'f':
+            model.models[lang_pair].decoder.train()
+            for p in  model.models[lang_pair].decoder.parameters():
+                p.requires_grad = True
+        return model
+
     def train_step(self, sample, model, criterion, optimizer,ignore_grad=False):
         model.train()
         agg_loss, agg_sample_size, agg_logging_output = 0., 0., {}
         for i,lang_pair in enumerate(self.args.lang_pairs):
             schedule = self.args.freeze_schedule[i].split('-')
-
-            #freeze encoder if required by schedule
-            if schedule[0] == 'f':
-                model.models[lang_pair].encoder.eval()
-            #freeze decoder if required by schedule
-            if schedule[1] == 'f':
-                model.models[lang_pair].decoder.eval()
+            model = self.freeze_module(model,lang_pair,schedule)
 
             if sample[lang_pair] is None or len(sample[lang_pair]) == 0:
                 continue
@@ -214,6 +235,7 @@ class InterlinguaNoDistanceTranslationTask(FairseqTask):
             # TODO make summing of the sample sizes configurable
             agg_sample_size += sample_size
             agg_logging_output[lang_pair] = logging_output
+            model = self.unfreeze_module(model,lang_pair,schedule)
         return agg_loss, agg_sample_size, agg_logging_output
 
     def valid_step(self, sample, model, criterion):
