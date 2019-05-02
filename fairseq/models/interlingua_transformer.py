@@ -168,18 +168,14 @@ class InterlinguaTransformerModel(FairseqInterlinguaModel):
         if args.share_decoders:
             shared_decoder = get_decoder(tgt_langs[0])
 
-        d0 = torch.device("cuda:0")
-        d1 = torch.device("cuda:1")
 
         for lang_pair, src, tgt in zip(args.lang_pairs, src_langs, tgt_langs):
             lang_pair = lang_pair.split('-')
             lang_encoders[lang_pair[0]] = try_encoder(src,tgt)
-            lang_encoders[lang_pair[1]] = try_encoder(tgt,src)
-            lang_decoders[lang_pair[0]] = try_decoder(src,tgt)
             lang_decoders[lang_pair[1]] = try_decoder(tgt,src)
 
-
-        return InterlinguaTransformerModel(lang_encoders, lang_decoders,task.auto)
+        auto = task.auto if hasattr(task,'auto') else False
+        return InterlinguaTransformerModel(lang_encoders, lang_decoders,auto)
 
 
 
