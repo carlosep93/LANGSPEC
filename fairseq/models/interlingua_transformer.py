@@ -68,6 +68,9 @@ class InterlinguaTransformerModel(FairseqInterlinguaModel):
         if not hasattr(args, 'max_target_positions'):
             args.max_target_positions = 1024
 
+        print('*******************')
+        print('LANG PAIRS', args.lang_pairs)
+        print('*******************')
         src_langs = [lang_pair.split('-')[0] for lang_pair in args.lang_pairs]
         tgt_langs = [lang_pair.split('-')[1] for lang_pair in args.lang_pairs]
 
