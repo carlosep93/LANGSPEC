@@ -250,6 +250,9 @@ def load_ensemble_for_inference(filenames, task, model_arg_overrides=None,pair=N
         if model_arg_overrides is not None:
             args = _override_model_args(args, model_arg_overrides)
 
+        if pair:
+            args.lang_pairs = [pair]
+
         # build model for ensemble
         model = task.build_model(args)
         model.upgrade_state_dict(state['model'])

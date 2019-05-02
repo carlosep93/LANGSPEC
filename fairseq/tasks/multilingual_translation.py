@@ -16,6 +16,7 @@ from fairseq.data import (
     IndexedRawTextDataset, RoundRobinZipDatasets,
 )
 from fairseq.models import FairseqMultiModel
+from fairseq.models.fairseq_model import  FairseqInterlinguaModel
 
 from . import FairseqTask, register_task
 

@@ -279,7 +279,7 @@ class FairseqInterlinguaModel(BaseFairseqModel):
     """Base class for combining multiple encoder-decoder models."""
     def __init__(self, encoders, decoders,auto=True):
         super().__init__()
-        assert encoders.keys() == decoders.keys()
+        #assert encoders.keys() == decoders.keys()
         self.auto = auto
         if auto:
             self.keys = [key1+'-'+key2 for key1 in encoders.keys() for key2 in decoders.keys()]

@@ -31,6 +31,8 @@ def main(args):
 
     use_cuda = torch.cuda.is_available() and not args.cpu
 
+    key = args.source_lang + '-' + args.target_lang
+
     # Load dataset splits
     task = tasks.setup_task(args)
     task.load_dataset(args.gen_subset)
@@ -40,11 +42,12 @@ def main(args):
     src_dict = task.source_dictionary
     tgt_dict = task.target_dictionary
 
-    key = args.source_lang + '-' + args.target_lang
 
     # Load ensemble
     print('| loading model(s) from {}'.format(args.path))
-    models, _ = utils.load_ensemble_for_inference(args.path.split(':'), task, model_arg_overrides=eval(args.model_overrides),pair=key)
+    args.model_overrides = {'lang_pairs':[key]}
+    #models, _ = utils.load_ensemble_for_inference(args.path.split(':'), task, model_arg_overrides=eval(args.model_overrides),pair=key)
+    models, _ = utils.load_ensemble_for_inference(args.path.split(':'), task, model_arg_overrides=args.model_overrides,pair=key)
 
     for model in models:
         model.keys = [key]
