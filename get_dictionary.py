@@ -7,7 +7,6 @@ import argparse
 from fairseq.data import dictionary
 from fairseq.tokenizer import Tokenizer, tokenize_line
 
-
 def get_argparser():
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--corpora', help='paths to all the corpora files',type=str,nargs='+')
