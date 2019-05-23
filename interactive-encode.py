@@ -81,8 +81,10 @@ def main(args):
     model_paths = args.path.split(':')
     #models, model_args = utils.load_ensemble_for_inference(model_paths, task, model_arg_overrides=eval(args.model_overrides))
 
-    key = args.source_lang + '-' + args.target_lang
-    models, _ = utils.load_partial_model_for_inference(args.enc_model,
+    if args.task != 'translation':
+
+        key = args.source_lang + '-' + args.target_lang
+        models, _ = utils.load_partial_model_for_inference(args.enc_model,
                                                        args.enc_key,
                                                        args.dec_model,
                                                        args.dec_key,
@@ -94,8 +96,11 @@ def main(args):
                                                        pair=key)
 
 
-    for model in models:
-        model.keys = [key]
+        for model in models:
+            model.keys = [key]
+
+    else:
+        models, _ = utils.load_ensemble_for_inference(model_paths, task, model_arg_overrides=eval(args.model_overrides))
 
     # Set dictionaries
     tgt_dict = task.target_dictionary
@@ -140,10 +145,11 @@ def main(args):
         *[model.max_positions() for model in models]
     )
 
+    data = {}
+    current_idx = 0
     for inputs in buffered_read(args.buffer_size):
         indices = []
         results = []
-        data = {}
         for batch, batch_indices in make_batches(inputs, args, task, max_positions):
             tokens = batch.tokens
             lengths = batch.lengths
@@ -155,10 +161,11 @@ def main(args):
             encoder_input = {'src_tokens': tokens, 'src_lengths': lengths}
             encodings = encoder.encode_interactive(encoder_input)
 
-            data[str(batch_indices[0])] = {
+            data[str(current_idx)] = {
                 'src':tokens.cpu().data.numpy().tolist(),
                 'encoding':encodings['encoder_out'].cpu().data.numpy().tolist()
             }
+            current_idx += 1
 
 
     with open(args.output_file,'w') as f:
