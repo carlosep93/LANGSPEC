@@ -43,14 +43,17 @@ def main(args):
     src_dict = task.source_dictionary
     tgt_dict = task.target_dictionary
 
+
     key = args.source_lang + '-' + args.target_lang
 
     # Load ensemble
     print('| loading model(s) from {}'.format(args.path))
     models, _ = utils.load_ensemble_for_inference(args.path.split(':'), task, model_arg_overrides=eval(args.model_overrides),pair=key)
 
-    for model in models:
-        model.keys = [key]
+    if args.task != 'translation':
+
+        for model in models:
+            model.keys = [key]
 
     # Optimize ensemble for generation
     for model in models:
@@ -83,7 +86,7 @@ def main(args):
     # Initialize generator
     gen_timer = StopwatchMeter()
 
-    encoder = SequenceDecoder(models, task.target_dictionary,layer=args.layer)
+    encoder = SequenceDecoder(models, task.target_dictionary,layer=int(args.layer))
 
 
     if use_cuda:
