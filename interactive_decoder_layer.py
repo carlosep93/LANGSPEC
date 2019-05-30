@@ -20,6 +20,7 @@ from fairseq import data, options, tasks, tokenizer, utils
 from fairseq.sequence_generator import SequenceGenerator
 from fairseq.sequence_encoder import SequenceEncoder
 from fairseq.sequence_decoder import SequenceDecoder
+from fairseq.models import FairseqIncrementalDecoder
 
 
 Batch = namedtuple('Batch', 'srcs tokens lengths')
@@ -140,13 +141,21 @@ def main(args):
                 tokens = tokens.cuda()
                 lengths = lengths.cuda()
 
+            incremental_states={}
+
+            for model in models:
+                if isinstance(model.decoder, FairseqIncrementalDecoder):
+                    incremental_states[model] = {}
+                else:
+                    incremental_states[model] = None
+
             encoder_input = {'src_tokens': tokens, 'src_lengths': lengths}
             encodings = encoder.encode_interactive(encoder_input)
-            decodings = decoder.decoder_interactive
+            _,_,inner_state = decoder._decode(tokens,[encodings],incremental_states)
 
             data[str(current_idx)] = {
                 'src':tokens.cpu().data.numpy().tolist(),
-                'encoding':encodings['encoder_out'].cpu().data.numpy().tolist()
+                'encoding':inner_state.cpu().data.numpy().tolist()
             }
             current_idx += 1
 
