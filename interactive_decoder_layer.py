@@ -59,6 +59,12 @@ def make_batches(lines, args, task, max_positions):
             lengths=batch['net_input']['src_lengths'],
         ), batch['id']
 
+def pad_sample(sample, max_length):
+    npad = max_length - sample['src_lengths'].data.tolist()[0]
+    if npad != 0:
+        sample['src_tokens'] = torch.nn.functional.pad(sample['src_tokens'],(npad,0),'constant',1)
+        sample['src_lengths'] = torch.IntTensor([max_length]*len(sample['src_lengths']))
+    return sample
 
 def main(args):
     if args.buffer_size < 1:
@@ -150,8 +156,10 @@ def main(args):
                     incremental_states[model] = None
 
             encoder_input = {'src_tokens': tokens, 'src_lengths': lengths}
-            encodings = encoder.encode_interactive(encoder_input)
-            _,_,inner_state = decoder._decode(tokens,[encodings],incremental_states)
+            encoder_input = pad_sample(encoder_input,220)
+            inner_state = decoder.generate(encoder_input)
+
+            qeqwe=0
 
             data[str(current_idx)] = {
                 'src':tokens.cpu().data.numpy().tolist(),

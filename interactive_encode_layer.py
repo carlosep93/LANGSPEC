@@ -159,7 +159,7 @@ def main(args):
                 lengths = lengths.cuda()
 
             encoder_input = {'src_tokens': tokens, 'src_lengths': lengths}
-            encodings = encoder.encode_interactive(encoder_input)
+            encodings = encoder.encode_layer_interactive(encoder_input, args.layer)
 
             data[str(current_idx)] = {
                 'src':tokens.cpu().data.numpy().tolist(),
