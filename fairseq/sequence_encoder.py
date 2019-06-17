@@ -31,6 +31,14 @@ class SequenceEncoder(object):
                 sample['ntokens'] = max_length
         return sample
 
+    def pad_sample_interactive(self, sample, max_length):
+        for key in sample.keys():
+            npad = max_length - sample['src_lengths'].data.tolist()[0]
+            if npad != 0:
+                sample['src_tokens'] = torch.nn.functional.pad(sample['src_tokens'],(npad,0),'constant',1)
+                sample['src_lengths'] = torch.IntTensor([max_length]*len(sample['src_lengths']))
+        return sample
+
     def encode_batched_itr(self, data_itr, max_length=220 ,cuda=False, timer=None):
         """Iterate over a batched dataset and yield scored translations."""
         for sample in data_itr:
@@ -76,11 +84,12 @@ class SequenceEncoder(object):
 
                 return encoder_out
 
-    def encode_interactive(self, sample):
+    def encode_interactive(self, sample,maxlength=220):
         """Score a batch of translations."""
         for model in self.models:
             with torch.no_grad():
                 model.eval()
+                sample = self.pad_sample_interactive(sample,maxlength)
                 encoder_out = model.encoder(**sample)
                 encoder_out['encoder_out'] = encoder_out['encoder_out'].permute(1,0,2)
                 #attn = decoder_out[1]
