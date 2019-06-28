@@ -326,6 +326,53 @@ class TransformerEncoder(FairseqEncoder):
             'encoder_padding_mask': encoder_padding_mask,  # B x T
         }
 
+    def get_layer(self, src_tokens, src_lengths,nlayer=-1):
+        """
+        Args:
+            src_tokens (LongTensor): tokens in the source language of shape
+                `(batch, src_len)`
+            src_lengths (torch.LongTensor): lengths of each source sentence of
+                shape `(batch)`
+
+        Returns:
+            dict:
+                - **encoder_out** (Tensor): the last encoder layer's output of
+                  shape `(src_len, batch, embed_dim)`
+                - **encoder_padding_mask** (ByteTensor): the positions of
+                  padding elements of shape `(batch, src_len)`
+        """
+        # embed tokens and positions
+        x = self.embed_scale * self.embed_tokens(src_tokens)
+        if self.embed_positions is not None:
+            x += self.embed_positions(src_tokens)
+        x = F.dropout(x, p=self.dropout, training=self.training)
+
+        # B x T x C -> T x B x C
+        x = x.transpose(0, 1)
+
+        # compute padding mask
+        encoder_padding_mask = src_tokens.eq(self.padding_idx)
+        if not encoder_padding_mask.any():
+            encoder_padding_mask = None
+
+        layers_output = [x]
+
+        # encoder layers
+        for layer in self.layers:
+            x = layer(x, encoder_padding_mask)
+            layers_output.append(x)
+
+        if self.normalize:
+            x = self.layer_norm(x)
+
+        return {
+            'encoder_out': layers_output[nlayer],  # T x B x C
+            'encoder_padding_mask': encoder_padding_mask,  # B x T
+        }
+
+
+
+
     def reorder_encoder_out(self, encoder_out, new_order):
         """
         Reorder encoder output according to *new_order*.

@@ -90,7 +90,19 @@ class SequenceEncoder(object):
             with torch.no_grad():
                 model.eval()
                 sample = self.pad_sample_interactive(sample,maxlength)
-                encoder_out = model.encoder(**sample)
+                encoder_out = model.encoder.forward(**sample)
+                encoder_out['encoder_out'] = encoder_out['encoder_out'].permute(1,0,2)
+                #attn = decoder_out[1]
+
+                return encoder_out
+
+    def encode_layer_interactive(self, sample,maxlength=220, layer=-1):
+        """Score a batch of translations."""
+        for model in self.models:
+            with torch.no_grad():
+                model.eval()
+                sample = self.pad_sample_interactive(sample,maxlength)
+                encoder_out = model.encoder.get_layer(sample['src_tokens'], sample['src_lengths'],layer)
                 encoder_out['encoder_out'] = encoder_out['encoder_out'].permute(1,0,2)
                 #attn = decoder_out[1]
 

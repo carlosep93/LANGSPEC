@@ -167,7 +167,7 @@ def main(args):
             }
             current_idx += 1
 
-
+    print(current_idx)
     with open(args.output_file,'w') as f:
         json.dump(data,f)
     print('Done')
