@@ -32,7 +32,7 @@ def safe_readline(f):
 class Tokenizer:
 
     @staticmethod
-    def add_file_to_dictionary_single_worker(filename, tokenize, eos_word, worker_id=0, num_workers=1):
+    def add_file_to_dictionary_single_worker(filename, tokenize, eos_word, worker_id=0, num_workers=1,remove_id=False):
         counter = Counter()
         with open(filename, 'r') as f:
             size = os.fstat(f.fileno()).st_size
@@ -43,7 +43,10 @@ class Tokenizer:
             if offset > 0:
                 safe_readline(f) # drop first incomplete line
             line = f.readline()
+            #Remove id from text in Kaldi format for Speech tasks
             while line:
+                if remove_id:
+                    line = ' '.join(line.split()[1:])
                 for word in tokenize(line):
                     counter.update([word])
                 counter.update([eos_word])
@@ -53,7 +56,7 @@ class Tokenizer:
         return counter
 
     @staticmethod
-    def add_file_to_dictionary(filename, dict, tokenize, num_workers):
+    def add_file_to_dictionary(filename, dict, tokenize, num_workers,remove_id=False):
         def merge_result(counter):
             for w, c in counter.items():
                 dict.add_symbol(w, c)
@@ -63,14 +66,14 @@ class Tokenizer:
             for worker_id in range(num_workers):
                 results.append(pool.apply_async(
                     Tokenizer.add_file_to_dictionary_single_worker,
-                    (filename, tokenize, dict.eos_word, worker_id, num_workers)
+                    (filename, tokenize, dict.eos_word, worker_id, num_workers,remove_id)
                 ))
             pool.close()
             pool.join()
             for r in results:
                 merge_result(r.get())
         else:
-            merge_result(Tokenizer.add_file_to_dictionary_single_worker(filename, tokenize, dict.eos_word))
+            merge_result(Tokenizer.add_file_to_dictionary_single_worker(filename, tokenize, dict.eos_word,remove_id=remove_id))
 
     @staticmethod
     def binarize(filename, dict, consumer, tokenize=tokenize_line,
