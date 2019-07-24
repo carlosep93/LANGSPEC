@@ -213,26 +213,20 @@ class SpeechEncoder(FairseqEncoder):
 
     def forward(self,x):
         #First subsample and Time-Depth Separable blocks
-        print('new batch')
-        print(x.shape)
         x = self.subsample1(x)
         s = x.size()
         x = x.view(s[0],self.kernels[0],self.input_channels,s[2])
-        print(x.shape)
         for layer in self.tds1:
             x = layer(x)
 
-        print(x.shape)
 
         s = x.size()
         x = x.view(s[0],s[1]*s[2],s[3])
-        print(x.shape)
         #Second subsample and Time-Depth Separable blocks
         x = self.subsample2(x)
 
         x = x.view(s[0],self.kernels[1],self.input_channels,int(s[3]/2)) if s[3]%2 == 0 else  x.view(s[0],self.kernels[1],self.input_channels,int(s[3]/2)+1)
 
-        print(x.shape)
 
 
         for layer in self.tds2:
@@ -241,16 +235,19 @@ class SpeechEncoder(FairseqEncoder):
         #Third subsample and Time-Depth Separable blocks
         s = x.size()
         x = x.view(s[0],s[1]*s[2],s[3])
-        print(x.shape)
         x = self.subsample3(x)
-        print(x.shape)
         x = x.view(s[0],self.kernels[2],self.input_channels,int(s[3]/2)) if s[3]%2 == 0 else  x.view(s[0],self.kernels[2],self.input_channels,int(s[3]/2)+1)
 
         for layer in self.tds3:
             x = layer(x)
 
-        print(x.shape)
-        #x = x.view(s[0],s[1],s[2],s[3])
+
+        #Shape encoding for the decoder
+
+        s = x.size()
+        x = x.view(s[0],s[1]*s[2],s[3])
+        x = x.permute(0,2,1)
+
         return {
             'encoder_out': x,  # T x B x C
         }
@@ -298,7 +295,6 @@ class TimeDepthSeparableBlock(nn.Module):
         s = x.size()
         #x = x.view(s[0],s[1],s[2]*s[3])
         x = x.view(s[0],s[1]*s[2],s[3])
-        print(x.shape)
         residual = x
         x = F.relu(self.fc1(x))
         x = self.fc2(x)
