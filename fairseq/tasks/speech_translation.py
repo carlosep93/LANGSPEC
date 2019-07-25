@@ -66,7 +66,7 @@ class SpeechTranslationTask(FairseqTask):
         parser.add_argument('--tds-layers', nargs='+', type=int, help='number of  tds layers')
         parser.add_argument('--kernel-size', default=21, type=int, metavar='N',
                             help='kernel size conv encoder')
-        parser.add_argument('--input-channels', default=40, type=int, metavar='N',
+        parser.add_argument('--input-channels', default=80, type=int, metavar='N',
                             help='channels on the input log mel spectrogram')
 
     def __init__(self, args, tgt_dict):

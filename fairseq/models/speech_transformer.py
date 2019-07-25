@@ -172,86 +172,99 @@ class SpeechEncoder(FairseqEncoder):
 
     '''
 
-    def __init__(self, args):
+    def __init__(self, args, normalize_before=False):
         super().__init__({})
         self.dropout = args.dropout
         self.input_channels = args.input_channels
         self.kernels = args.kernels
+        self.normalize_before = normalize_before
 
-        self.subsample1 = nn.Conv1d(args.input_channels,args.input_channels*args.kernels[0],kernel_size=1,stride=2)
-        self.subsample2 = nn.Conv1d(args.kernels[0]*args.input_channels,args.kernels[1]*args.input_channels,kernel_size=1, stride=2)
-        self.subsample3 = nn.Conv1d(args.kernels[1]*args.input_channels,args.kernels[2]*args.input_channels,kernel_size=1, stride=2)
+        self.subsample1 = nn.Conv2d(1,args.kernels[0],kernel_size=(1,21),stride=(1,2),padding=(0,10))
+        self.subsample2 = nn.Conv2d(args.kernels[0],args.kernels[1],kernel_size=(1,21), stride=(1,2), padding=(0,10))
+        self.subsample3 = nn.Conv2d(args.kernels[1],args.kernels[2],kernel_size=(1,21), stride=(1,2), padding=(0,10))
+
+        self.dropouts = nn.ModuleList([torch.nn.Dropout(self.dropout) for i in range(3)])
+        self.layer_norms = nn.ModuleList([SpeechLayerNorm() for i in range(3)])
+        self.relus = nn.ModuleList([nn.ReLU() for i in range(3)])
 
         self.tds1 = nn.ModuleList([])
-        #self.tds1.extend([
-        #    TimeDepthSeparableBlock(args,in_channels=1, out_channels=args.kernels[0])
-        #])
         self.tds1.extend([
             TimeDepthSeparableBlock(args,in_channels=args.kernels[0], out_channels=args.kernels[0])
             for i in range(args.tds_layers[0])
         ])
 
         self.tds2 = nn.ModuleList([])
-        #self.tds2.extend([
-        #    TimeDepthSeparableBlock(args,in_channels=args.kernels[0],out_channels=args.kernels[1])
-        #])
         self.tds2.extend([
             TimeDepthSeparableBlock(args,in_channels=args.kernels[1],out_channels=args.kernels[1])
             for i in range(args.tds_layers[1])
         ])
 
         self.tds3 = nn.ModuleList([])
-        #self.tds3.extend([
-        #    TimeDepthSeparableBlock(args,in_channels=args.kernels[1],out_channels=args.kernels[2])
-        #])
         self.tds3.extend([
             TimeDepthSeparableBlock(args,in_channels=args.kernels[2],out_channels=args.kernels[2])
             for i in range(args.tds_layers[2])
         ])
 
+        self.linear = nn.Linear(1440, 512)
+
         self.max_pos =  {'scp':(1024,1024)}
 
     def forward(self,x):
+
         #First subsample and Time-Depth Separable blocks
+        x = x.unsqueeze(1)
         x = self.subsample1(x)
-        s = x.size()
-        x = x.view(s[0],self.kernels[0],self.input_channels,s[2])
+        x = self.relus[0](x)
+        x = self.dropouts[0](x)
+        x = self.maybe_layer_norm(0, x, after=True)
+
+
         for layer in self.tds1:
             x = layer(x)
 
 
-        s = x.size()
-        x = x.view(s[0],s[1]*s[2],s[3])
         #Second subsample and Time-Depth Separable blocks
+        s = x.size()
+        #x = x.view(s[0],s[1]*s[2],s[3])
         x = self.subsample2(x)
+        x = self.relus[1](x)
+        x = self.dropouts[1](x)
+        x = self.maybe_layer_norm(1, x, after=True)
 
         x = x.view(s[0],self.kernels[1],self.input_channels,int(s[3]/2)) if s[3]%2 == 0 else  x.view(s[0],self.kernels[1],self.input_channels,int(s[3]/2)+1)
-
-
 
         for layer in self.tds2:
             x = layer(x)
 
         #Third subsample and Time-Depth Separable blocks
         s = x.size()
-        x = x.view(s[0],s[1]*s[2],s[3])
         x = self.subsample3(x)
+        x = self.relus[2](x)
+        x = self.dropouts[2](x)
+        x = self.maybe_layer_norm(2, x, after=True)
+
         x = x.view(s[0],self.kernels[2],self.input_channels,int(s[3]/2)) if s[3]%2 == 0 else  x.view(s[0],self.kernels[2],self.input_channels,int(s[3]/2)+1)
 
         for layer in self.tds3:
             x = layer(x)
-
 
         #Shape encoding for the decoder
 
         s = x.size()
         x = x.view(s[0],s[1]*s[2],s[3])
         x = x.permute(0,2,1)
+        x = self.linear(x)
 
         return {
-            'encoder_out': x,  # T x B x C
+            'encoder_out': x,
         }
 
+    def maybe_layer_norm(self, i, x, before=False, after=False):
+        assert before ^ after
+        if after ^ self.normalize_before:
+            return self.layer_norms[i](x)
+        else:
+            return x
 
     def max_positions(self):
         """Maximum input length supported by the encoder."""
@@ -268,19 +281,24 @@ class TimeDepthSeparableBlock(nn.Module):
         super().__init__()
         self.dropout = args.dropout
         self.relu_dropout = args.relu_dropout
-        self.kernel_size =[args.kernel_size,1]
+        self.kernel_size =[1,args.kernel_size]
         self.conv2D = torch.nn.Conv2d(in_channels,
                                       out_channels,
                                       self.kernel_size,
                                       stride=(1,1),
-                                      padding=(10,0))
+                                      padding=(0,10))
 
         #Fully connected block
-        self.fc1 = torch.nn.Conv1d(out_channels*args.input_channels, out_channels*args.input_channels, 1)
-        self.fc2 = torch.nn.Conv1d(out_channels*args.input_channels, out_channels*args.input_channels, 1)
+        #self.fc1 = torch.nn.Conv2d(out_channels*args.input_channels, out_channels*args.input_channels, kernel_size=(1,1),stride=1)
+        #self.fc2 = torch.nn.Conv2d(out_channels*args.input_channels, out_channels*args.input_channels, kernel_size=(1,1),stride=1)
+
+        dim = out_channels*args.input_channels
+        self.fc1 = nn.Linear(dim,dim)
+        self.fc2 = nn.Linear(dim,dim)
+
         self.normalize_before = False
         self.layer_norms = nn.ModuleList([SpeechLayerNorm() for i in range(2)])
-        self.dropouts = nn.ModuleList([torch.nn.Dropout(self.dropout) for i in range(2)])
+        self.dropouts = nn.ModuleList([torch.nn.Dropout(self.dropout) for i in range(3)])
 
     def forward(self,x):
 
@@ -293,15 +311,20 @@ class TimeDepthSeparableBlock(nn.Module):
 
         #Fully Connected Sub-block
         s = x.size()
-        #x = x.view(s[0],s[1],s[2]*s[3])
         x = x.view(s[0],s[1]*s[2],s[3])
+        x = x.permute(0,2,1)
+
         residual = x
         x = F.relu(self.fc1(x))
+        x = self.dropouts[1](x)
         x = self.fc2(x)
         x = residual + x
-        x = self.dropouts[1](x)
+        x = self.dropouts[2](x)
         x = self.maybe_layer_norm(1, x, after=True)
+
+        x = x.permute(0,2,1)
         x = x.view(s[0],s[1],s[2],s[3])
+
         return x
 
     def maybe_layer_norm(self, i, x, before=False, after=False):
@@ -310,176 +333,6 @@ class TimeDepthSeparableBlock(nn.Module):
             return self.layer_norms[i](x)
         else:
             return x
-
-
-class TransformerEncoder(FairseqEncoder):
-    """
-    Transformer encoder consisting of *args.encoder_layers* layers. Each layer
-    is a :class:`TransformerEncoderLayer`.
-
-    Args:
-        args (argparse.Namespace): parsed command-line arguments
-        dictionary (~fairseq.data.Dictionary): encoding dictionary
-        embed_tokens (torch.nn.Embedding): input embedding
-        left_pad (bool, optional): wheth        parser.add_argument('--kernel-size', default=21, type=int, metavar='N',
-                            help='kernel size conv encoder')er the input is left-padded. Default:
-            ``True``
-    """
-
-    def __init__(self, args, dictionary, embed_tokens, left_pad=True):
-        super().__init__(dictionary)
-        self.dropout = args.dropout
-
-        embed_dim = embed_tokens.embedding_dim
-        self.padding_idx = embed_tokens.padding_idx
-        self.max_source_positions = args.max_source_positions
-
-        self.embed_tokens = embed_tokens
-        self.embed_scale = math.sqrt(embed_dim)
-        self.embed_positions = PositionalEmbedding(
-            args.max_source_positions, embed_dim, self.padding_idx,
-            left_pad=left_pad,
-            learned=args.encoder_learned_pos,
-        ) if not args.no_token_positional_embeddings else None
-
-        self.layers = nn.ModuleList([])
-        self.layers.extend([
-            TransformerEncoderLayer(args)
-            for i in range(args.encoder_layers)
-        ])
-        self.register_buffer('version', torch.Tensor([2]))
-        self.normalize = args.encoder_normalize_before
-        if self.normalize:
-            self.layer_norm = LayerNorm(embed_dim)
-
-    def forward(self, src_tokens, src_lengths):
-        """
-        Args:
-            src_tokens (LongTensor): tokens in the source language of shape
-                `(batch, src_len)`
-            src_lengths (torch.LongTensor): lengths of each source sentence of
-                shape `(batch)`
-
-        Returns:
-            dict:
-                - **encoder_out** (Tensor): the last encoder layer's output of
-                  shape `(src_len, batch, embed_dim)`
-                - **encoder_padding_mask** (ByteTensor): the positions of
-                  padding elements of shape `(batch, src_len)`
-        """
-        # embed tokens and positions
-        x = self.embed_scale * self.embed_tokens(src_tokens)
-        if self.embed_positions is not None:
-            x += self.embed_positions(src_tokens)
-        x = F.dropout(x, p=self.dropout, training=self.training)
-
-        # B x T x C -> T x B x C
-        x = x.transpose(0, 1)
-
-        # compute padding mask
-        encoder_padding_mask = src_tokens.eq(self.padding_idx)
-        if not encoder_padding_mask.any():
-            encoder_padding_mask = None
-
-        # encoder layers
-        for layer in self.layers:
-            x = layer(x, encoder_padding_mask)
-
-        if self.normalize:
-            x = self.layer_norm(x)
-
-        return {
-            'encoder_out': x,  # T x B x C
-            'encoder_padding_mask': encoder_padding_mask,  # B x T
-        }
-
-    def get_layer(self, src_tokens, src_lengths,nlayer=-1):
-        """
-        Args:
-            src_tokens (LongTensor): tokens in the source language of shape
-                `(batch, src_len)`
-            src_lengths (torch.LongTensor): lengths of each source sentence of
-                shape `(batch)`
-
-        Returns:
-            dict:
-                - **encoder_out** (Tensor): the last encoder layer's output of
-                  shape `(src_len, batch, embed_dim)`
-                - **encoder_padding_mask** (ByteTensor): the positions of
-                  padding elements of shape `(batch, src_len)`
-        """
-        # embed tokens and positions
-        x = self.embed_scale * self.embed_tokens(src_tokens)
-        if self.embed_positions is not None:
-            x += self.embed_positions(src_tokens)
-        x = F.dropout(x, p=self.dropout, training=self.training)
-
-        # B x T x C -> T x B x C
-        x = x.transpose(0, 1)
-
-        # compute padding mask
-        encoder_padding_mask = src_tokens.eq(self.padding_idx)
-        if not encoder_padding_mask.any():
-            encoder_padding_mask = None
-
-        layers_output = [x]
-
-        # encoder layers
-        for layer in self.layers:
-            x = layer(x, encoder_padding_mask)
-            layers_output.append(x)
-
-        if self.normalize:
-            x = self.layer_norm(x)
-
-        return {
-            'encoder_out': layers_output[nlayer],  # T x B x C
-            'encoder_padding_mask': encoder_padding_mask,  # B x T
-        }
-
-
-
-
-    def reorder_encoder_out(self, encoder_out, new_order):
-        """
-        Reorder encoder output according to *new_order*.
-
-        Args:
-            encoder_out: output from the ``forward()`` method
-            new_order (LongTensor): desired order
-
-        Returns:
-            *encoder_out* rearranged according to *new_order*
-        """
-        if encoder_out['encoder_out'] is not None:
-            encoder_out['encoder_out'] = \
-                encoder_out['encoder_out'].index_select(1, new_order)
-        if encoder_out['encoder_padding_mask'] is not None:
-            encoder_out['encoder_padding_mask'] = \
-                encoder_out['encoder_padding_mask'].index_select(0, new_order)
-        return encoder_out
-
-    def max_positions(self):
-        """Maximum input length supported by the encoder."""
-        if self.embed_positions is None:
-            return self.max_source_positions
-        return min(self.max_source_positions, self.embed_positions.max_positions())
-
-    def upgrade_state_dict_named(self, state_dict, name):
-        """Upgrade a (possibly old) state dict for new versions of fairseq."""
-        if isinstance(self.embed_positions, SinusoidalPositionalEmbedding):
-            weights_key = '{}.embed_positions.weights'.format(name)
-            if weights_key in state_dict:
-                del state_dict[weights_key]
-            state_dict['{}.embed_positions._float_tensor'.format(name)] = torch.FloatTensor(1)
-        version_key = '{}.version'.format(name)
-        if utils.item(state_dict.get(version_key, torch.Tensor([1]))[0]) < 2:
-            # earlier checkpoints did not normalize after the stack of layers
-            self.layer_norm = None
-            self.normalize = False
-            state_dict[version_key] = torch.Tensor([1])
-        return state_dict
-
 
 class TransformerDecoder(FairseqIncrementalDecoder):
     """
