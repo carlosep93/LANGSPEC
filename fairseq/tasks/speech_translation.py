@@ -69,6 +69,20 @@ class SpeechTranslationTask(FairseqTask):
         parser.add_argument('--input-channels', default=80, type=int, metavar='N',
                             help='channels on the input log mel spectrogram')
 
+        #SpecAugment arguments
+        parser.add_argument('--W', default=80, type=int, metavar='N',
+                            help='maximum warp distance')
+        parser.add_argument('--F', default=27, type=int, metavar='N',
+                            help='maximum number of continuous masked frequencies')
+        parser.add_argument('--T', default=100, type=int, metavar='N',
+                            help='maximum number of continous masked time steps')
+        parser.add_argument('--p', default=80, type=float, metavar='N',
+                            help='maximum masked rate')
+        parser.add_argument('--mf', default=1, type=int, metavar='N',
+                            help='number of frequency masks')
+        parser.add_argument('--mt', default=1, type=int, metavar='N',
+                            help='number of time masks')
+
     def __init__(self, args, tgt_dict):
         super().__init__(args)
         self.tgt_dict = tgt_dict
@@ -140,7 +154,16 @@ class SpeechTranslationTask(FairseqTask):
                     else:
                         raise FileNotFoundError('Dataset not found: {} ({})'.format(split, data_path))
 
-                src_datasets.append(SpeechDataset(prefix + src))
+                src_datasets.append(SpeechDataset(prefix + src,
+                                                  n_mels=self.args.input_channels,
+                                                  max_len=self.args.max_source_positions,
+                                                  W=self.args.W,
+                                                  F=self.args.F,
+                                                  T=self.args.T,
+                                                  p=self.args.p,
+                                                  mf=self.args.mf,
+                                                  mt=self.args.mt))
+
                 tgt_datasets.append(indexed_dataset(prefix + tgt, self.tgt_dict))
 
                 print('| {} {} {} examples'.format(data_path, split_k, len(src_datasets[-1])))

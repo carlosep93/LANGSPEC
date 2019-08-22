@@ -11,9 +11,12 @@ import struct
 import numpy as np
 import torch
 
+from fairseq.SparseImageWarp import *
+
 import librosa
 import wave
 import subprocess
+import random
 
 from fairseq.tokenizer import Tokenizer
 
@@ -138,20 +141,60 @@ def mel_spectrogram(path, window_size, window_stride, window, normalize, max_len
 
     return param
 
+def spec_augment(sample,W,F,T,mf,mt,p):
+
+    v,tau = sample.shape
+    center_position = v/2
+    random_point = np.random.randint(low=W, high=tau - W)
+    #Sparse image warping (TO DO: boundary points)
+    # warping distance chose.
+    w = np.random.uniform(low=0, high=W)
+    control_point_locations = torch.Tensor([[[center_position, random_point]]])
+    control_point_destination = torch.Tensor([[[center_position, random_point + w]]])
+    sample = sample.unsqueeze(0)
+    sample, _ = sparse_image_warp(sample, control_point_locations, control_point_destination)
+    sample = sample.squeeze(0)
+    sample = sample.squeeze(-1)
+    #Frequency masking
+    for i in range(mf):
+        f = np.random.uniform(low=0.0, high=F)
+        f = int(f)
+        f0 = random.randint(0, v - f)
+        sample[f0:f0 + f, :] = 0
+
+    #Time masking
+    for i in range(mt):
+        t = np.random.uniform(low=0.0, high=min(T,p*v))
+        t = int(t)
+        t0 = random.randint(0, tau - t)
+        sample[:, t0:t0 + t] = 0
+
+    return sample
+    #Time masking
+
+
 class SpeechDataset(torch.utils.data.Dataset):
     """Loader for TorchNet IndexedDataset"""
 
     def __init__(self,
                  path,
+                 n_mels=80,
                  window_size=.02,
                  window_stride=.01,
                  window_type='hamming',
                  normalize=True,
                  max_len=97,
+                 W=10,
+                 F=27,
+                 T=10,
+                 p=1.0,
+                 mf=1,
+                 mt=1,
                  append_eos=True,
                  reverse_order=False,
                  fix_lua_indexing=False,
                  transform=None,
+                 masked=True,
                  read_data=True):
         super().__init__()
 
@@ -162,6 +205,16 @@ class SpeechDataset(torch.utils.data.Dataset):
         self.normalize = normalize
         self.max_len = max_len
         self.transform = transform
+        self.masked = masked
+        self.n_mels = n_mels
+
+        #SpecAugment parameters
+        self.W = W
+        self.F = F
+        self.T = T
+        self.mf = mf
+        self.mt = mt
+        self.p = p
 
         self.fix_lua_indexing = fix_lua_indexing
         self.wavs = make_dataset(path)
@@ -209,9 +262,11 @@ class SpeechDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, i):
         key, path = self.wavs[i]
-        params = mel_spectrogram(path, self.window_size, self.window_stride, self.window_type, self.normalize, self.max_len)  # pylint: disable=line-too-long
+        params = mel_spectrogram(path, self.window_size, self.window_stride, self.window_type, self.normalize, self.max_len,self.n_mels)  # pylint: disable=line-too-long
         if self.transform:
             params = self.transform(params)
+        if self.masked:
+            params = spec_augment(params,self.W, self.F,self.T, self.mf, self.mt,self.p)
         return key, params
 
     def __len__(self):
