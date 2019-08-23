@@ -15,6 +15,8 @@ from .language_pair_dataset import LanguagePairDataset
 from .monolingual_dataset import MonolingualDataset
 from .round_robin_zip_datasets import RoundRobinZipDatasets,ParallelRoundRobinZipDatasets
 from .token_block_dataset import TokenBlockDataset
+from .speech_dataset import  SpeechDataset
+from .speech_pair_dataset import  SpeechPairDataset
 
 from .iterators import (
     CountingIterator,
@@ -41,4 +43,6 @@ __all__ = [
     'RoundRobinZipDatasets',
     'ShardedIterator',
     'TokenBlockDataset',
+    'SpeechDataset',
+    'SpeechPairDataset'
 ]

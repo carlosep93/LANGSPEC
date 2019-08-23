@@ -106,6 +106,9 @@ def get_parser():
     parser.add_argument(
         "--workers", metavar="N", default=1, type=int, help="number of parallel workers"
     )
+    parser.add_argument(
+        "--remove-id",action="store_true",help="remove id of text file in ARS tasks"
+    )
     return parser
 
 
@@ -323,7 +326,8 @@ def build_and_save_dictionary(
 def build_dictionary(filenames, workers):
     d = dictionary.Dictionary()
     for filename in filenames:
-        Tokenizer.add_file_to_dictionary(filename, d, tokenize_line, workers)
+        print('Remove id', args.remove_id)
+        Tokenizer.add_file_to_dictionary(filename, d, tokenize_line, workers,args.remove_id)
     return d
 
 
