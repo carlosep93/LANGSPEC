@@ -206,6 +206,19 @@ class SpeechTranslationTask(FairseqTask):
         """Return the target :class:`~fairseq.data.Dictionary`."""
         return self.tgt_dict
 
+
+    def pad_sample(self,sample,max_len):
+        # Add one padding to make all param with the same dims
+        if sample.shape[1] < max_len:
+            pad = np.ones((sample.shape[0], max_len - sample.shape[1]))
+            sample = np.hstack((pad, sample))
+
+        # If exceeds max_len keep last samples
+        elif sample.shape[1] > max_len:
+            sample = sample[:, -max_len:]
+        return sample
+
+
     def train_step(self, sample, model, criterion, optimizer, ignore_grad=False):
         """
         Do forward and backward, and return the loss as computed by *criterion*
@@ -229,6 +242,7 @@ class SpeechTranslationTask(FairseqTask):
         model.train()
         print('sample shape', sample['net_input']['src'].shape)
         loss, sample_size, logging_output = criterion(model, sample)
+        print('sample shape', sample['net_input']['src'].shape)
         if ignore_grad:
             loss *= 0
         optimizer.backward(loss)

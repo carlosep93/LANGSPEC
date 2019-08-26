@@ -13,9 +13,27 @@ from fairseq import utils
 from . import data_utils, FairseqDataset
 
 
+def pad_sample(samples,max_len):
+        longest = max([s['source'][1].shape[1] for s in samples])
+        max_len = min(longest,max_len)
+        for s in samples:
+            # Add one padding to make all param with the same dims
+            if s['source'][1].shape[1] < max_len:
+                npad = max_len -  s['source'][1].shape[1]
+                pad_s = torch.nn.functional.pad(s['source'][1],(0,npad),'constant',1)
+                s['source'] = (s['source'][0],pad_s)
+
+            # If exceeds max_len keep last samples
+            elif  s['source'][1].shape[1] > max_len:
+                 s['source'] =  (s['source'][0],s['source'][1][:, -max_len:])
+
+        return samples
+
+
+
 def collate(
     samples, pad_idx, eos_idx, left_pad_source=True, left_pad_target=False,
-    input_feeding=True,
+    input_feeding=True,max_len=100
 ):
     if len(samples) == 0:
         return {}
@@ -25,7 +43,7 @@ def collate(
             [s[key] for s in samples],
             pad_idx, eos_idx, left_pad, move_eos_to_beginning,
         )
-
+    samples = pad_sample(samples,max_len)
     id = torch.LongTensor([s['id'] for s in samples])
     src = torch.stack([s['source'][1] for s in samples])
     # sort by descending source length
@@ -173,7 +191,7 @@ class SpeechPairDataset(FairseqDataset):
         return collate(
             samples, pad_idx=self.tgt_dict.pad(), eos_idx=self.tgt_dict.eos(),
             left_pad_source=self.left_pad_source, left_pad_target=self.left_pad_target,
-            input_feeding=self.input_feeding,
+            input_feeding=self.input_feeding,max_len=self.max_source_positions
         )
 
     def get_dummy_batch(self, num_tokens, max_positions, src_len=128, tgt_len=128):

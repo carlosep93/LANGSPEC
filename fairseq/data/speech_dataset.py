@@ -119,17 +119,6 @@ def mel_spectrogram(path, window_size, window_stride, window, normalize, max_len
     S = librosa.stft(y, n_fft=n_fft, hop_length=hop_length, win_length=win_length, window=window, center=False)
     D = np.abs(S)
     param = librosa.feature.melspectrogram(S=D, sr=sfr, n_mels=n_mels, fmin=lowfreq, fmax=highfreq, norm=None)
-
-    print('spectrogram original size', param.shape)
-    # Add one padding to make all param with the same dims
-    if param.shape[1] < max_len:
-        pad = np.ones((param.shape[0], max_len - param.shape[1]))
-        param = np.hstack((pad, param))
-
-    # If exceeds max_len keep last samples
-    elif param.shape[1] > max_len:
-        param = param[:, -max_len:]
-
     param = torch.FloatTensor(param)
 
     # z-score normalization
@@ -146,6 +135,7 @@ def spec_augment(sample,W,F,T,mf,mt,p):
 
     v,tau = sample.shape
     center_position = v/2
+    W = min(tau,W)
     random_point = np.random.randint(low=W, high=tau - W)
     #Sparse image warping (TO DO: boundary points)
     # warping distance chose.
