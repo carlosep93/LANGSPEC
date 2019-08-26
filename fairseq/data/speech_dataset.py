@@ -120,6 +120,7 @@ def mel_spectrogram(path, window_size, window_stride, window, normalize, max_len
     D = np.abs(S)
     param = librosa.feature.melspectrogram(S=D, sr=sfr, n_mels=n_mels, fmin=lowfreq, fmax=highfreq, norm=None)
 
+    print('spectrogram original size', param.shape)
     # Add one padding to make all param with the same dims
     if param.shape[1] < max_len:
         pad = np.ones((param.shape[0], max_len - param.shape[1]))

@@ -227,7 +227,7 @@ class SpeechTranslationTask(FairseqTask):
                 - logging outputs to display while training
         """
         model.train()
-
+        print('sample shape', sample['net_input']['src'].shape)
         loss, sample_size, logging_output = criterion(model, sample)
         if ignore_grad:
             loss *= 0
