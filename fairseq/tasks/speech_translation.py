@@ -82,6 +82,8 @@ class SpeechTranslationTask(FairseqTask):
                             help='number of frequency masks')
         parser.add_argument('--mt', default=1, type=int, metavar='N',
                             help='number of time masks')
+        parser.add_argument('--mask-speech', default='True', type=str, metavar='BOOL',
+                            help='apply specAugment to the speech input')
 
     def __init__(self, args, tgt_dict):
         super().__init__(args)
@@ -162,7 +164,8 @@ class SpeechTranslationTask(FairseqTask):
                                                   T=self.args.T,
                                                   p=self.args.p,
                                                   mf=self.args.mf,
-                                                  mt=self.args.mt))
+                                                  mt=self.args.mt,
+                                                  masked=bool(self.args.mask_speech)))
 
                 tgt_datasets.append(indexed_dataset(prefix + tgt, self.tgt_dict))
 
@@ -192,7 +195,8 @@ class SpeechTranslationTask(FairseqTask):
 
     def max_positions(self):
         """Return the max sentence length allowed by the task."""
-        return self.datasets['train'].max_source_positions
+        key = 'train' if 'train' in self.datasets.keys() else 'test'
+        return self.datasets[key].max_source_positions
 
     '''
     @property

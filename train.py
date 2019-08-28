@@ -210,7 +210,7 @@ def validate(args, trainer, task, epoch_itr, subsets):
         # batches per worker.
         max_positions = utils.resolve_max_positions(
             task.max_positions(),
-            trainer.get_model.max_positions(),
+            trainer.get_model().max_positions(),
         )
     else:
         max_positions = task.max_positions()

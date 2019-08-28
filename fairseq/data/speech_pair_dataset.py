@@ -236,6 +236,9 @@ class SpeechPairDataset(FairseqDataset):
         self.src.prefetch(indices)
         self.tgt.prefetch(indices)
 
+    def max_source_positions(self):
+        return self.max_source_positions
+
     @property
     def supports_prefetch(self):
         return (
