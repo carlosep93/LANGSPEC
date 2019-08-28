@@ -209,6 +209,22 @@ class SpeechEncoder(FairseqEncoder):
 
         self.max_pos =  {'scp':(1024,1024)}
 
+    def reorder_encoder_out(self, encoder_out, new_order):
+        """
+        Reorder encoder output according to *new_order*.
+
+        Args:
+            encoder_out: output from the ``forward()`` method
+            new_order (LongTensor): desired order
+
+        Returns:
+            *encoder_out* rearranged according to *new_order*
+        """
+        if encoder_out['encoder_out'] is not None:
+            encoder_out['encoder_out'] = \
+                encoder_out['encoder_out'].index_select(1, new_order)
+        return encoder_out
+
     def forward(self,x):
 
         #First subsample and Time-Depth Separable blocks
@@ -254,6 +270,8 @@ class SpeechEncoder(FairseqEncoder):
         x = x.view(s[0],s[1]*s[2],s[3])
         x = x.permute(0,2,1)
         x = self.linear(x)
+        # B x T x C -> T x B x C
+        x = x.permute(1,0,2)
 
         return {
             'encoder_out': x,
