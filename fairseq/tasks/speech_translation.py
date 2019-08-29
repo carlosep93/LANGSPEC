@@ -165,7 +165,7 @@ class SpeechTranslationTask(FairseqTask):
                                                   p=self.args.p,
                                                   mf=self.args.mf,
                                                   mt=self.args.mt,
-                                                  masked=bool(self.args.mask_speech)))
+                                                  masked=self.args.mask_speech=='True'))
 
                 tgt_datasets.append(indexed_dataset(prefix + tgt, self.tgt_dict))
 
