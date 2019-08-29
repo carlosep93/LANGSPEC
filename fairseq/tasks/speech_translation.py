@@ -165,7 +165,7 @@ class SpeechTranslationTask(FairseqTask):
                                                   p=self.args.p,
                                                   mf=self.args.mf,
                                                   mt=self.args.mt,
-                                                  masked=bool(self.args.mask_speech)))
+                                                  masked=self.args.mask_speech=='True'))
 
                 tgt_datasets.append(indexed_dataset(prefix + tgt, self.tgt_dict))
 
@@ -244,9 +244,7 @@ class SpeechTranslationTask(FairseqTask):
                 - logging outputs to display while training
         """
         model.train()
-        print('sample shape', sample['net_input']['src'].shape)
         loss, sample_size, logging_output = criterion(model, sample)
-        print('sample shape', sample['net_input']['src'].shape)
         if ignore_grad:
             loss *= 0
         optimizer.backward(loss)

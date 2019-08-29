@@ -298,7 +298,7 @@ class TimeDepthSeparableBlock(nn.Module):
                                       out_channels,
                                       self.kernel_size,
                                       stride=(1,1),
-                                      padding=(0,self.kernel_size//2))
+                                      padding=(0,self.kernel_size[1]//2))
 
         dim = out_channels*args.input_channels
         self.fc1 = nn.Linear(dim,dim)
