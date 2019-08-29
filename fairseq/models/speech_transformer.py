@@ -247,8 +247,6 @@ class SpeechEncoder(FairseqEncoder):
         x = self.dropouts[1](x)
         x = self.maybe_layer_norm(1, x, after=True)
 
-        x = x.view(s[0],self.kernels[1],self.input_channels,int(s[3]/2)) if s[3]%2 == 0 else  x.view(s[0],self.kernels[1],self.input_channels,int(s[3]/2)+1)
-
         for layer in self.tds2:
             x = layer(x)
 
@@ -259,19 +257,15 @@ class SpeechEncoder(FairseqEncoder):
         x = self.dropouts[2](x)
         x = self.maybe_layer_norm(2, x, after=True)
 
-        x = x.view(s[0],self.kernels[2],self.input_channels,int(s[3]/2)) if s[3]%2 == 0 else  x.view(s[0],self.kernels[2],self.input_channels,int(s[3]/2)+1)
-
         for layer in self.tds3:
             x = layer(x)
 
         #Shape encoding for the decoder
-
         s = x.size()
         x = x.view(s[0],s[1]*s[2],s[3])
-        x = x.permute(0,2,1)
+        # B x CW x T -> T x B x CW
+        x = x.permute(2,0,1)
         x = self.linear(x)
-        # B x T x C -> T x B x C
-        x = x.permute(1,0,2)
 
         return {
             'encoder_out': x,
@@ -295,7 +289,7 @@ class TimeDepthSeparableBlock(nn.Module):
     Args:
         args (argparse.Namespace): parsed command-line arguments
     """
-    def __init__(self,args,in_channels=1,out_channels=10):
+    def __init__(self,args,in_channels,out_channels):
         super().__init__()
         self.dropout = args.dropout
         self.relu_dropout = args.relu_dropout
@@ -304,11 +298,7 @@ class TimeDepthSeparableBlock(nn.Module):
                                       out_channels,
                                       self.kernel_size,
                                       stride=(1,1),
-                                      padding=(0,10))
-
-        #Fully connected block
-        #self.fc1 = torch.nn.Conv2d(out_channels*args.input_channels, out_channels*args.input_channels, kernel_size=(1,1),stride=1)
-        #self.fc2 = torch.nn.Conv2d(out_channels*args.input_channels, out_channels*args.input_channels, kernel_size=(1,1),stride=1)
+                                      padding=(0,self.kernel_size//2))
 
         dim = out_channels*args.input_channels
         self.fc1 = nn.Linear(dim,dim)
@@ -323,25 +313,27 @@ class TimeDepthSeparableBlock(nn.Module):
         #Conv Sub-block
         residual = x
         x = F.relu(self.conv2D(x))
-        x =residual + x
         x = self.dropouts[0](x)
+        x = residual + x
+        
+        #First Layer Norm
         x = self.maybe_layer_norm(0, x, after=True)
 
         #Fully Connected Sub-block
+        residual = x
         s = x.size()
         x = x.view(s[0],s[1]*s[2],s[3])
         x = x.permute(0,2,1)
-
-        residual = x
         x = F.relu(self.fc1(x))
         x = self.dropouts[1](x)
         x = self.fc2(x)
-        x = residual + x
-        x = self.dropouts[2](x)
-        x = self.maybe_layer_norm(1, x, after=True)
-
         x = x.permute(0,2,1)
         x = x.view(s[0],s[1],s[2],s[3])
+        x = self.dropouts[2](x)
+        x = residual + x
+        
+        #Second Layer Norm
+        x = self.maybe_layer_norm(1, x, after=True)
 
         return x
 
