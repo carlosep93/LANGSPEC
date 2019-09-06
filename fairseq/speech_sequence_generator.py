@@ -84,7 +84,7 @@ class SpeechSequenceGenerator(object):
                 k: v for k, v in input.items()
                 if k != 'prev_output_tokens'
             }
-            srclen = encoder_input['src'].size(1)
+            srclen = encoder_input['src_tokens'].size(1)
             if timer is not None:
                 timer.start()
             with torch.no_grad():
@@ -117,7 +117,7 @@ class SpeechSequenceGenerator(object):
 
     def _generate(self, encoder_input, beam_size=None, maxlen=None, prefix_tokens=None):
         """See generate"""
-        src_tokens = encoder_input['src']
+        src_tokens = encoder_input['src_tokens']
         bsz, freqs, srclen = src_tokens.size()
         maxlen = min(maxlen, self.maxlen) if maxlen is not None else self.maxlen
 
@@ -136,7 +136,7 @@ class SpeechSequenceGenerator(object):
                 incremental_states[model] = None
 
             # compute the encoder output for each beam
-            encoder_out = model.encoder(encoder_input['src'])
+            encoder_out = model.encoder(encoder_input['src_tokens'],encoder_input['src_lengths'])
             new_order = torch.arange(bsz).view(-1, 1).repeat(1, beam_size).view(-1)
             new_order = new_order.to(src_tokens.device)
             encoder_out = model.encoder.reorder_encoder_out(encoder_out, new_order)

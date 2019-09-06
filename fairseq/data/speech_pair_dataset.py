@@ -47,7 +47,7 @@ def collate(
     id = torch.LongTensor([s['id'] for s in samples])
     src = torch.stack([s['source'][1] for s in samples])
     # sort by descending source length
-    src_lengths = torch.LongTensor([s['target'].numel() for s in samples])
+    src_lengths = torch.LongTensor([s['source'][1].size(1) for s in samples])
     src_lengths, sort_order = src_lengths.sort(descending=True)
     id = id.index_select(0, sort_order)
     src = src.index_select(0, sort_order)
@@ -75,7 +75,7 @@ def collate(
         'id': id,
         'ntokens': ntokens,
         'net_input': {
-            'src': src,
+            'src_tokens': src,
             'src_lengths': src_lengths,
         },
         'target': target,
