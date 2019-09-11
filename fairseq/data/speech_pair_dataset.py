@@ -7,7 +7,6 @@
 
 import numpy as np
 import torch
-
 from fairseq import utils
 
 from . import data_utils, FairseqDataset
@@ -20,7 +19,7 @@ def pad_sample(samples,max_len):
             # Add one padding to make all param with the same dims
             if s['source'][1].shape[1] < max_len:
                 npad = max_len -  s['source'][1].shape[1]
-                pad_s = torch.nn.functional.pad(s['source'][1],(0,npad),'constant',1)
+                pad_s = torch.nn.functional.pad(s['source'][1],(0,npad),'constant',0)
                 s['source'] = (s['source'][0],pad_s)
 
             # If exceeds max_len keep last samples

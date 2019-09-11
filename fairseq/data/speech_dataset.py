@@ -17,6 +17,7 @@ import librosa
 import wave
 import subprocess
 import random
+import matplotlib.pyplot as plot
 
 from fairseq.tokenizer import Tokenizer
 
@@ -98,41 +99,52 @@ def make_dataset(kaldi_path):
         key_to_wav = dict()
         for wav_line in wav_scp:
             wav_key, wav = wav_line.strip().split(' ', 1)
-            #text_key, sentence = text_line.strip().split(' ', 1)
-            #assert wav_key == text_key
             wavs.append([wav_key, wav])
 
     return wavs
 
 
-def mel_spectrogram(path, window_size, window_stride, window, normalize, max_len,n_mels=80):
-    y, sfr = wav_read(path)
-
-    # window length
+def mfsc(y, sfr, window_size=0.025, window_stride=0.010, window='hamming', n_mels=80, preemCoef=0.97):
     win_length = int(sfr * window_size)
     hop_length = int(sfr * window_stride)
     n_fft = 512
-    lowfreq = 20
-    highfreq = sfr/2 - 400
+    lowfreq = 0
+    highfreq = sfr/2
 
+    # melspectrogram
+    y *= 32768
+    y[1:] = y[1:] - preemCoef*y[:-1]
+    y[0] *= (1 - preemCoef)
     try:
-        # melspectrogram
         S = librosa.stft(y, n_fft=n_fft, hop_length=hop_length, win_length=win_length, window=window, center=False)
         D = np.abs(S)
         param = librosa.feature.melspectrogram(S=D, sr=sfr, n_mels=n_mels, fmin=lowfreq, fmax=highfreq, norm=None)
-
+        mf = np.log(np.maximum(1, param))
+    
     except librosa.util.exceptions.ParameterError:
-        param = np.ones((n_mels,100))
+        mf = np.ones((n_mels,100))
+
+    return mf
+
+
+def mel_spectrogram(path, window_size, window_stride, window, normalize, max_len,n_mels=80, filter_factor=0.97):
+    y, sfr = wav_read(path)
+
+    param =mfsc(y,sfr,window_size,window_stride,window,n_mels)
+    #print('% de no 0', np.count_nonzero(param)/(param.shape[0] * param.shape[1]))
+    #plot.imshow(param)
+    #plot.show()
 
     param = torch.FloatTensor(param)
     
     # z-score normalization
-    if normalize:
-        mean = param.mean()
-        std = param.std()
-        if std != 0:
-            param.add_(-mean)
-            param.div_(std)
+    #if normalize:
+    #    mean = param.mean()
+    #    std = param.std()
+    #    if std != 0:
+    #        param.add_(-mean)
+    #        param.div_(std)
+    
 
     return param
 
@@ -176,7 +188,7 @@ class SpeechDataset(torch.utils.data.Dataset):
     def __init__(self,
                  path,
                  n_mels=80,
-                 window_size=.02,
+                 window_size=.025,
                  window_stride=.01,
                  window_type='hamming',
                  normalize=True,
