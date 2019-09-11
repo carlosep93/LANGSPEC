@@ -8,10 +8,11 @@
 import math
 
 import torch
-
+import numpy as np
 from fairseq import search, utils
 from fairseq.models import FairseqIncrementalDecoder
 
+import matplotlib.pyplot as plot
 
 class SpeechSequenceGenerator(object):
     def __init__(
@@ -74,6 +75,10 @@ class SpeechSequenceGenerator(object):
             maxlen_b = self.maxlen
 
         for sample in data_itr:
+            src_tokens = sample['net_input']['src_tokens'][0]
+            #plot.imshow(src_tokens)
+            #plot.show()
+            print('% de no 0', np.count_nonzero(src_tokens)/(src_tokens.shape[0] * src_tokens.shape[1]))
             s = utils.move_to_cuda(sample) if cuda else sample
             if 'net_input' not in s:
                 continue
@@ -84,7 +89,7 @@ class SpeechSequenceGenerator(object):
                 k: v for k, v in input.items()
                 if k != 'prev_output_tokens'
             }
-            srclen = encoder_input['src_tokens'].size(1)
+            srclen = encoder_input['src_tokens'].size(2)
             if timer is not None:
                 timer.start()
             with torch.no_grad():
