@@ -120,10 +120,15 @@ def mfsc(y, sfr, window_size=0.025, window_stride=0.010, window='hamming', n_mel
     y *= 32768
     y[1:] = y[1:] - preemCoef*y[:-1]
     y[0] *= (1 - preemCoef)
-    S = librosa.stft(y, n_fft=n_fft, hop_length=hop_length, win_length=win_length, window=window, center=False)
-    D = np.abs(S)
-    param = librosa.feature.melspectrogram(S=D, sr=sfr, n_mels=n_mels, fmin=lowfreq, fmax=highfreq, norm=None)
-    mf = np.log(np.maximum(1, param))
+    try:
+        S = librosa.stft(y, n_fft=n_fft, hop_length=hop_length, win_length=win_length, window=window, center=False)
+        D = np.abs(S)
+        param = librosa.feature.melspectrogram(S=D, sr=sfr, n_mels=n_mels, fmin=lowfreq, fmax=highfreq, norm=None)
+        mf = np.log(np.maximum(1, param))
+    
+    except librosa.util.exceptions.ParameterError:
+        mf = np.ones((n_mels,100))
+
     return mf
 
 
@@ -148,19 +153,15 @@ def mel_spectrogram(path, window_size, window_stride, window, normalize, max_len
 
     return param
 
-
-
-
-
 def spec_augment(sample,W,F,T,mf,mt,p):
 
     v,tau = sample.shape
     center_position = v/2
-    W = min(tau,W)
-    random_point = np.random.randint(low=W, high=tau - W)
+    random_point = np.random.randint(low=0, high=tau)
     #Sparse image warping (TO DO: boundary points)
     # warping distance chose.
-    w = np.random.uniform(low=0, high=W)
+    W = min(W,tau/3)
+    w = np.random.uniform(low=W, high=tau-W)
     control_point_locations = torch.Tensor([[[center_position, random_point]]])
     control_point_destination = torch.Tensor([[[center_position, random_point + w]]])
     sample = sample.unsqueeze(0)
@@ -176,6 +177,7 @@ def spec_augment(sample,W,F,T,mf,mt,p):
 
     #Time masking
     for i in range(mt):
+        T = min(T,tau/3)
         t = np.random.uniform(low=0.0, high=min(T,p*v))
         t = int(t)
         t0 = random.randint(0, tau - t)
