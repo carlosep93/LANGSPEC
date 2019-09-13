@@ -13,6 +13,11 @@ import torch
 
 from fairseq.SparseImageWarp import *
 
+
+import torchaudio
+import torchaudio.compliance.kaldi as kaldi
+from . import speech_data_utils
+
 import librosa
 import wave
 import subprocess
@@ -186,8 +191,8 @@ class SpeechDataset(torch.utils.data.Dataset):
     def __init__(self,
                  path,
                  n_mels=80,
-                 window_size=.025,
-                 window_stride=.01,
+                 window_size=25.0,
+                 window_stride=10.0,
                  window_type='hamming',
                  normalize=True,
                  max_len=97,
@@ -269,12 +274,20 @@ class SpeechDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, i):
         key, path = self.wavs[i]
-        params = mel_spectrogram(path, self.window_size, self.window_stride, self.window_type, self.normalize, self.max_len,self.n_mels)  # pylint: disable=line-too-long
+        #params = mel_spectrogram(path, self.window_size, self.window_stride, self.window_type, self.normalize, self.max_len,self.n_mels)  # pylint: disable=line-too-long
+        sound, sample_rate = torchaudio.load_wav(path)
+        output = kaldi.fbank(
+            sound,
+            num_mel_bins=self.n_mels,
+            frame_length=self.window_size,
+            frame_shift=self.window_stride
+        )
+        params = speech_data_utils.apply_mv_norm(output).t()
         if self.transform:
             params = self.transform(params)
         if self.masked:
             params = spec_augment(params,self.W, self.F,self.T, self.mf, self.mt,self.p)
-        return key, params
+        return key, params.detach()
 
     def __len__(self):
         return self.size

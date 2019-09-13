@@ -19,7 +19,7 @@ def pad_sample(samples,max_len):
             # Add one padding to make all param with the same dims
             if s['source'][1].shape[1] < max_len:
                 npad = max_len -  s['source'][1].shape[1]
-                pad_s = torch.nn.functional.pad(s['source'][1],(0,npad),'constant',0)
+                pad_s = torch.nn.functional.pad(s['source'][1],(0,npad),'constant',0.0)
                 s['source'] = (s['source'][0],pad_s)
 
             # If exceeds max_len keep last samples
@@ -78,7 +78,7 @@ def collate(
             'src_lengths': src_lengths,
         },
         'target': target,
-        'nsentences': samples[0]['target'].size(0),
+        'nsentences': len(samples)
     }
     if prev_output_tokens is not None:
         batch['net_input']['prev_output_tokens'] = prev_output_tokens
