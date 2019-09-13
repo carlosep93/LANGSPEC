@@ -1,6 +1,3 @@
-# Copyright (c) 2017-present, Facebook, Inc.
-# All rights reserved.
-#
 # This source code is licensed under the license found in the LICENSE file in
 # the root directory of this source tree. An additional grant of patent rights
 # can be found in the PATENTS file in the same directory.
@@ -13,65 +10,24 @@ import torch.nn.functional as F
 
 from fairseq import options
 from fairseq import utils
+from torch.nn.parameter import Parameter
 
 from fairseq.modules import (
-    AdaptiveInput, AdaptiveSoftmax, CharacterTokenEmbedder, LearnedPositionalEmbedding, MultiheadAttention,
-    SinusoidalPositionalEmbedding
+    AdaptiveSoftmax, LearnedPositionalEmbedding, LocalMultiheadAttention,
+    SinusoidalPositionalEmbedding, PositionalEmbeddingAudio,
+    GradMultiply, MultiheadAttention
 )
 
 from . import (
     FairseqIncrementalDecoder, FairseqEncoder, FairseqLanguageModel, FairseqModel, register_model,
     register_model_architecture,
 )
+import torch.utils.checkpoint as cp
 
+# Code for the R-Transformer
 
-
-class SpeechLayerNorm(nn.Module):
-
-  def __init__(self, eps=1e-5):
-      super().__init__()
-      self.gamma = nn.Parameter(torch.Tensor(1))
-      self.beta = nn.Parameter(torch.Tensor(1))
-      self.eps = eps
-      self.reset_parameters()
-
-  def reset_parameters(self):
-      nn.init.uniform_(self.gamma)
-      nn.init.zeros_(self.beta)
-
-  def forward(self, x):
-      xv = x.view(x.size(0),-1)
-      mean = xv.mean(dim=1, keepdim=True)
-      xm = xv - mean
-      var = (xm*xm).mean(dim=1, keepdim=True)
-      xm = xm * torch.rsqrt(var + self.eps)
-      return self.gamma * xm.view_as(x) + self.beta
-
-
-
-@register_model('speech_transformer')
-class SpeechTransformerModel(FairseqModel):
-    """
-
-
-    Transformer model mixing the encder fron
-    'Sequence-to-Sequence Speech Recognition with Time-Depth Separable Convolutions'
-    <https://arxiv.org/abs/1904.02619>
-    `"Attention Is All You Need" (Vaswani, et al, 2017)
-    <https://arxiv.org/abs/1706.03762>`_.
-
-    Args:
-        encoder (SpeechEncoder): the encoder
-        decoder (TransformerDecoder): the decoder
-
-    The Transformer model provides the following named architectures and
-    command-line arguments:
-
-    .. argparse::
-        :ref: fairseq.models.transformer_parser
-        :prog:
-    """
-
+@register_model('r_transformer')
+class TransformerModel(FairseqModel):
     def __init__(self, encoder, decoder):
         super().__init__(encoder, decoder)
 
@@ -119,22 +75,31 @@ class SpeechTransformerModel(FairseqModel):
                                  ' (requires shared dictionary and embed dim)')
         parser.add_argument('--adaptive-softmax-cutoff', metavar='EXPR',
                             help='comma separated list of adaptive softmax cutoff points. '
-                                 'Must be used with adaptive_loss criterion'),
-        parser.add_argument('--adaptive-softmax-dropout', type=float, metavar='D',
-                            help='sets adaptive softmax dropout for the tail projections')
+                                 'Must be used with adaptive_loss criterion')
+        parser.add_argument('--encoder-convolutions', type=str, metavar='EXPR',
+                            help='encoder layers [(dim, kernel_size), ...]')
+        parser.add_argument('--normalization-constant', type=float, default=1.0)
+        parser.add_argument('--conv-attention', action='store_true')
+        parser.add_argument('--distance-penalty', type=str, default=False,
+                            choices=['log', 'gauss'],
+                            help='Add distance penalty to the encoder')
+        parser.add_argument('--init-variance', type=float, default=1.0,
+                            help='Initialization value for variance')
+
 
     @classmethod
     def build_model(cls, args, task):
         """Build a new model instance."""
+
         # make sure all arguments are present in older models
         base_architecture(args)
 
         if not hasattr(args, 'max_source_positions'):
-            args.max_source_positions = 1024
+            args.max_source_positions = 100000
         if not hasattr(args, 'max_target_positions'):
-            args.max_target_positions = 1024
+            args.max_target_positions = 100000
 
-        tgt_dict = task.target_dictionary
+        src_dict, tgt_dict = task.target_dictionary, task.target_dictionary
 
         def build_embedding(dictionary, embed_dim, path=None):
             num_embeddings = len(dictionary)
@@ -146,203 +111,155 @@ class SpeechTransformerModel(FairseqModel):
                 utils.load_embedding(embed_dict, dictionary, emb)
             return emb
 
-
         decoder_embed_tokens = build_embedding(
                 tgt_dict, args.decoder_embed_dim, args.decoder_embed_path
             )
 
-        encoder = SpeechEncoder(args)
-        decoder = TransformerDecoder(args, tgt_dict, decoder_embed_tokens)
-        return SpeechTransformerModel(encoder, decoder)
+        encoder = TransformerEncoder(args,
+                tgt_dict,
+            )
+        decoder = TransformerDecoder(args,
+                tgt_dict,
+                decoder_embed_tokens,
+            )
+        return TransformerModel(encoder, decoder)
 
 
-    def forward(self, src_tokens, src_lengths, prev_output_tokens):
-
-        encoder_out = self.encoder(src_tokens,src_lengths)
-        decoder_out = self.decoder(prev_output_tokens, encoder_out)
-        return decoder_out
-
-
-
-class SpeechEncoder(FairseqEncoder):
-    '''
-    Convolutional encoder based on the paper
-    'Sequence-to-Sequence Speech Recognition with Time-Depth Separable Convolutions'
-    https://arxiv.org/abs/1904.02619
-
-    '''
-
-    def __init__(self, args, normalize_before=False):
-        super().__init__({})
+class TransformerEncoder(FairseqEncoder):
+    """Transformer encoder."""
+    def __init__(self, args, dictionary, left_pad=True, convolutions=((512, 3),) * 20, stride=2,
+                 audio_features=40, ):
+        super().__init__(dictionary)
         self.dropout = args.dropout
-        self.input_channels = args.input_channels
-        self.kernels = args.kernels
-        self.normalize_before = normalize_before
+        embed_dim = args.encoder_embed_dim
+        self.max_source_positions = args.max_source_positions
 
-        self.subsample1 = nn.Conv2d(1,args.kernels[0],kernel_size=(1,21),stride=(1,2),padding=(0,10))
-        self.subsample2 = nn.Conv2d(args.kernels[0],args.kernels[1],kernel_size=(1,21), stride=(1,2), padding=(0,10))
-        self.subsample3 = nn.Conv2d(args.kernels[1],args.kernels[2],kernel_size=(1,21), stride=(1,2), padding=(0,10))
+        self.padding_idx = dictionary.pad()
 
-        self.dropouts = nn.ModuleList([torch.nn.Dropout(self.dropout) for i in range(3)])
-        self.layer_norms = nn.ModuleList([SpeechLayerNorm() for i in range(3)])
-        self.relus = nn.ModuleList([nn.ReLU() for i in range(3)])
+        convolutions = eval(args.encoder_convolutions) if args.encoder_convolutions is not None else convolutions
 
-        self.tds1 = nn.ModuleList([])
-        self.tds1.extend([
-            TimeDepthSeparableBlock(args,in_channels=args.kernels[0], out_channels=args.kernels[0])
-            for i in range(args.tds_layers[0])
+        convolutions = extend_conv_spec(convolutions)
+        self.convolutions = nn.ModuleList()
+        in_channels = 1
+        for i, (out_channels, kernel_size, kernel_width) in enumerate(convolutions):
+            if kernel_size % 2 == 1:
+                padding = kernel_size // 2
+            else:
+                padding = 0
+            self.convolutions.append(
+                        Conv2D(in_channels, out_channels, kernel_size,
+                            dropout=self.dropout, padding=padding, stride=2)
+            )
+            in_channels = out_channels
+        self.relu = nn.ReLU()
+
+        self.fc1 = Linear(audio_features, 2*embed_dim)
+        self.fc2 = Linear(2*embed_dim, embed_dim)
+        self.embed_scale = math.sqrt(embed_dim)
+
+        args.encoder_dim = embed_dim * (in_channels // (2 ** len(convolutions))) // 2
+
+        self.layers = nn.ModuleList([])
+
+        encoder_embed_dim = args.encoder_embed_dim
+        args.encoder_embed_dim = args.encoder_dim
+        self.fc3 = Linear(args.encoder_dim*2, embed_dim*2)
+        self.layers.extend([
+            TransformerEncoderLayer(args)
+            for _ in range(args.encoder_layers)
         ])
+        self.embed_positions = PositionalEmbeddingAudio(
+            args.max_source_positions, args.encoder_dim, 0,
+            left_pad=left_pad,
+            learned=args.encoder_learned_pos,
+        ) if not args.no_token_positional_embeddings else None
+        args.encoder_embed_dim = encoder_embed_dim
+        self.register_buffer('version', torch.Tensor([2]))
+        self.normalize = args.encoder_normalize_before
+        if self.normalize:
+           self.layer_norm = LayerNorm(args.encoder_dim)
 
-        self.tds2 = nn.ModuleList([])
-        self.tds2.extend([
-            TimeDepthSeparableBlock(args,in_channels=args.kernels[1],out_channels=args.kernels[1])
-            for i in range(args.tds_layers[1])
-        ])
+    def forward(self, src_tokens, src_lengths):
+        # embed tokens and positionsi
+        x = src_tokens.permute(0,2,1)
+        x = torch.tanh(self.fc1(x))
+        x = F.dropout(x, p=self.dropout, training=self.training)
+        x = torch.tanh(self.fc2(x))
 
-        self.tds3 = nn.ModuleList([])
-        self.tds3.extend([
-            TimeDepthSeparableBlock(args,in_channels=args.kernels[2],out_channels=args.kernels[2])
-            for i in range(args.tds_layers[2])
-        ])
+        #B x T x C -> B x 1 x T x C
+        x = x.unsqueeze(1)
+        # temporal convolutions
+        for conv in self.convolutions:
+           x = F.dropout(x, p=self.dropout, training=self.training)
+           if conv.kernel_size[0] % 2 == 1:
+               #padding is implicit in the conv
+               x = conv(x)
+           else:
+               padding_l = (conv.kernel_size[0] - 1) // 2
+               padding_r = conv.kernel_size[0] // 2
+               x = F.pad(x, (0, 0, 0, 0, padding_l, padding_r))
+               x = conv(x)
+           src_lengths = torch.ceil(src_lengths.float() / 2).long()
+        # B x Cout x T x F -> T x B x C
+        bsz, out_channels, time, feats = x.size()
+        x = x.transpose(1, 2).contiguous().view(bsz, time, -1) \
+            .contiguous().transpose(0, 1)
+        x = F.dropout(x, p=self.dropout, training=self.training)
+        x = self.relu(self.fc3(x))
+        
+        x = x + self.embed_positions(x.transpose(0, 1), src_lengths).transpose(0, 1)
+        x = F.dropout(x, p=self.dropout, training=self.training)
 
-        self.linear = nn.Linear(1440, 512)
+        encoder_padding_mask = self.create_mask(src_lengths)
 
-        self.max_pos =  {'scp':(1024,1024)}
+        # encoder layers
+        for layer in self.layers:
+            x = layer(x, encoder_padding_mask)
+
+        if self.normalize:
+            x = self.layer_norm(x)
+
+        return {
+            'encoder_out': x,  # T x B x C
+            'encoder_padding_mask': encoder_padding_mask,  # B x T
+        }
+
+    def create_mask(self, lengths):
+        max_len = max(lengths)
+        mask = lengths.new_zeros(len(lengths), max_len).byte()
+        for i, l in enumerate(lengths):
+            mask[i, :max_len-l] = 1
+        if not mask.any():
+            mask = None
+        return mask
 
     def reorder_encoder_out(self, encoder_out, new_order):
-        """
-        Reorder encoder output according to *new_order*.
-
-        Args:
-            encoder_out: output from the ``forward()`` method
-            new_order (LongTensor): desired order
-
-        Returns:
-            *encoder_out* rearranged according to *new_order*
-        """
         if encoder_out['encoder_out'] is not None:
             encoder_out['encoder_out'] = \
                 encoder_out['encoder_out'].index_select(1, new_order)
+        if encoder_out['encoder_padding_mask'] is not None:
+            encoder_out['encoder_padding_mask'] = \
+                encoder_out['encoder_padding_mask'].index_select(0, new_order)
         return encoder_out
-
-    def forward(self,x,src_lengths):
-
-        #First subsample and Time-Depth Separable blocks
-        x = x.unsqueeze(1)
-        x = self.subsample1(x)
-        x = self.relus[0](x)
-        x = self.dropouts[0](x)
-        x = self.maybe_layer_norm(0, x, after=True)
-
-
-        for layer in self.tds1:
-            x = layer(x)
-
-
-        #Second subsample and Time-Depth Separable blocks
-        s = x.size()
-        #x = x.view(s[0],s[1]*s[2],s[3])
-        x = self.subsample2(x)
-        x = self.relus[1](x)
-        x = self.dropouts[1](x)
-        x = self.maybe_layer_norm(1, x, after=True)
-
-        for layer in self.tds2:
-            x = layer(x)
-
-        #Third subsample and Time-Depth Separable blocks
-        s = x.size()
-        x = self.subsample3(x)
-        x = self.relus[2](x)
-        x = self.dropouts[2](x)
-        x = self.maybe_layer_norm(2, x, after=True)
-
-        for layer in self.tds3:
-            x = layer(x)
-
-        #Shape encoding for the decoder
-        s = x.size()
-        x = x.view(s[0],s[1]*s[2],s[3])
-        # B x CW x T -> T x B x CW
-        x = x.permute(2,0,1)
-        x = self.linear(x)
-
-        return {
-            'encoder_out': x,
-        }
-
-    def maybe_layer_norm(self, i, x, before=False, after=False):
-        assert before ^ after
-        if after ^ self.normalize_before:
-            return self.layer_norms[i](x)
-        else:
-            return x
 
     def max_positions(self):
         """Maximum input length supported by the encoder."""
-        return self.max_pos
+        #if self.embed_positions is None:
+        return self.max_source_positions
+        #return min(self.max_source_positions, self.embed_positions.max_positions())
 
-class TimeDepthSeparableBlock(nn.Module):
-    """
-    Time-Depth-Separable Convolution Block for Speech.
+    def upgrade_state_dict(self, state_dict):
+        if isinstance(self.embed_positions, SinusoidalPositionalEmbedding):
+            if 'encoder.embed_positions.weights' in state_dict:
+                del state_dict['encoder.embed_positions.weights']
+            state_dict['encoder.embed_positions._float_tensor'] = torch.FloatTensor(1)
+        if state_dict.get('encoder.version', torch.Tensor([1]))[0] < 2:
+            # earlier checkpoints did not normalize after the stack of layers
+            self.layer_norm = None
+            self.normalize = False
+            state_dict['encoder.version'] = torch.Tensor([1])
+        return state_dict
 
-    Args:
-        args (argparse.Namespace): parsed command-line arguments
-    """
-    def __init__(self,args,in_channels,out_channels):
-        super().__init__()
-        self.dropout = args.dropout
-        self.relu_dropout = args.relu_dropout
-        self.kernel_size =[1,args.kernel_size]
-        self.conv2D = torch.nn.Conv2d(in_channels,
-                                      out_channels,
-                                      self.kernel_size,
-                                      stride=(1,1),
-                                      padding=(0,self.kernel_size[1]//2))
-
-        dim = out_channels*args.input_channels
-        self.fc1 = nn.Linear(dim,dim)
-        self.fc2 = nn.Linear(dim,dim)
-
-        self.normalize_before = False
-        self.layer_norms = nn.ModuleList([SpeechLayerNorm() for i in range(2)])
-        self.dropouts = nn.ModuleList([torch.nn.Dropout(self.dropout) for i in range(3)])
-
-    def forward(self,x):
-
-        #Conv Sub-block
-        residual = x
-        x = F.relu(self.conv2D(x))
-        x = self.dropouts[0](x)
-        x = residual + x
-        
-        #First Layer Norm
-        x = self.maybe_layer_norm(0, x, after=True)
-
-        #Fully Connected Sub-block
-        residual = x
-        s = x.size()
-        x = x.view(s[0],s[1]*s[2],s[3])
-        x = x.permute(0,2,1)
-        x = F.relu(self.fc1(x))
-        x = self.dropouts[1](x)
-        x = self.fc2(x)
-        x = x.permute(0,2,1)
-        x = x.view(s[0],s[1],s[2],s[3])
-        x = self.dropouts[2](x)
-        x = residual + x
-        
-        #Second Layer Norm
-        x = self.maybe_layer_norm(1, x, after=True)
-
-        return x
-
-    def maybe_layer_norm(self, i, x, before=False, after=False):
-        assert before ^ after
-        if after ^ self.normalize_before:
-            return self.layer_norms[i](x)
-        else:
-            return x
 
 class TransformerDecoder(FairseqIncrementalDecoder):
     """
@@ -366,7 +283,7 @@ class TransformerDecoder(FairseqIncrementalDecoder):
 
         input_embed_dim = embed_tokens.embedding_dim
         embed_dim = args.decoder_embed_dim
-        output_embed_dim = args.decoder_output_dim
+        output_embed_dim = args.decoder_embed_dim
 
         padding_idx = embed_tokens.padding_idx
         self.max_target_positions = args.max_target_positions
@@ -460,7 +377,7 @@ class TransformerDecoder(FairseqIncrementalDecoder):
             x, attn = layer(
                 x,
                 encoder_out['encoder_out'] if encoder_out is not None else None,
-                None,
+                encoder_out['encoder_padding_mask'] if encoder_out is not None else None,
                 incremental_state,
                 self_attn_mask=self.buffered_future_mask(x) if incremental_state is None else None,
             )
@@ -528,8 +445,6 @@ class TransformerDecoder(FairseqIncrementalDecoder):
         return state_dict
 
 
-
-
 class TransformerEncoderLayer(nn.Module):
     """Encoder layer block.
 
@@ -548,9 +463,11 @@ class TransformerEncoderLayer(nn.Module):
     def __init__(self, args):
         super().__init__()
         self.embed_dim = args.encoder_embed_dim
-        self.self_attn = MultiheadAttention(
+        attn = LocalMultiheadAttention if args.distance_penalty != False else MultiheadAttention
+        self.self_attn = attn(
             self.embed_dim, args.encoder_attention_heads,
-            dropout=args.attention_dropout,
+            dropout=args.attention_dropout, penalty=args.distance_penalty,
+            init_variance=(args.init_variance if args.distance_penalty == 'gauss' else None)
         )
         self.dropout = args.dropout
         self.relu_dropout = args.relu_dropout
@@ -610,7 +527,6 @@ class TransformerDecoderLayer(nn.Module):
         no_encoder_attn (bool, optional): whether to attend to encoder outputs.
             Default: ``False``
     """
-
     def __init__(self, args, no_encoder_attn=False):
         super().__init__()
         self.embed_dim = args.decoder_embed_dim
@@ -726,6 +642,23 @@ class TransformerDecoderLayer(nn.Module):
         self.need_attn = need_attn
 
 
+def extend_conv_spec(convolutions):
+        """
+        Extends convolutional spec that is a list of tuples of 2 or 3 parameters
+        (kernel size, dim size and optionally how many layers behind to look for residual)
+        to default the residual propagation param if it is not specified
+        """
+        extended = []
+        for spec in convolutions:
+            if len(spec) == 3:
+                extended.append(spec)
+            elif len(spec) == 2:
+                extended.append(spec + (1,))
+            else:
+                raise Exception('invalid number of parameters in convolution spec ' + str(spec) + '. expected 2 or 3')
+        return tuple(extended)
+
+
 def Embedding(num_embeddings, embedding_dim, padding_idx):
     m = nn.Embedding(num_embeddings, embedding_dim, padding_idx=padding_idx)
     nn.init.normal_(m.weight, mean=0, std=embedding_dim ** -0.5)
@@ -735,14 +668,32 @@ def Embedding(num_embeddings, embedding_dim, padding_idx):
 
 def LayerNorm(embedding_dim):
     m = nn.LayerNorm(embedding_dim)
+    nn.init.constant_(m.weight, 1)
+    nn.init.constant_(m.bias, 0)
     return m
 
 
 def Linear(in_features, out_features, bias=True):
     m = nn.Linear(in_features, out_features, bias)
     nn.init.xavier_uniform_(m.weight)
-    if bias:
-        nn.init.constant_(m.bias, 0.)
+    nn.init.constant_(m.bias, 0.)
+    return m
+
+
+def Conv2D(in_channels, out_channels, kernel_size, dropout=0, **kwargs):
+    """Weight-normalized Conv2d layer"""
+    m = nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, **kwargs)
+    std = math.sqrt((4 * (1.0 - dropout)) / (m.kernel_size[0] * in_channels))
+    nn.init.normal_(m.weight, mean=0, std=std)
+    nn.init.constant_(m.bias, 0)
+    return m
+
+
+def PositionalEmbeddingAudioLayer(num_embeddings, embedding_dim, padding_idx, left_pad, learned=True):
+    m = PositionalEmbeddingAudio(num_embeddings, embedding_dim, padding_idx, left_pad, learned=learned)
+    if learned:
+        nn.init.normal_(m.weight, 0, 0.1)
+        nn.init.constant_(m.weight[padding_idx], 0)
     return m
 
 
@@ -756,9 +707,24 @@ def PositionalEmbedding(num_embeddings, embedding_dim, padding_idx, left_pad, le
     return m
 
 
+def LSTM(input_size, hidden_size, **kwargs):
+    m = nn.LSTM(input_size, hidden_size, **kwargs)
+    for name, param in m.named_parameters():
+        if 'weight' in name:
+            nn.init.normal_(param, mean=0, std=0.1)
+        elif 'bias' in name:
+            nn.init.constant_(param, 0)
+    return m
+
+def BatchNorm(embedding_dim):
+    m = nn.BatchNorm2d(embedding_dim)
+    nn.init.constant_(m.weight, 1)
+    nn.init.constant_(m.bias, 0)
+    return m
 
 
-@register_model_architecture('speech_transformer', 'speech_transformer')
+
+@register_model_architecture('r_transformer', 'r_transformer')
 def base_architecture(args):
     args.encoder_embed_path = getattr(args, 'encoder_embed_path', None)
     args.encoder_embed_dim = getattr(args, 'encoder_embed_dim', 512)
@@ -778,41 +744,103 @@ def base_architecture(args):
     args.relu_dropout = getattr(args, 'relu_dropout', 0.)
     args.dropout = getattr(args, 'dropout', 0.1)
     args.adaptive_softmax_cutoff = getattr(args, 'adaptive_softmax_cutoff', None)
-    args.adaptive_softmax_dropout = getattr(args, 'adaptive_softmax_dropout', 0)
     args.share_decoder_input_output_embed = getattr(args, 'share_decoder_input_output_embed', False)
     args.share_all_embeddings = getattr(args, 'share_all_embeddings', False)
     args.no_token_positional_embeddings = getattr(args, 'no_token_positional_embeddings', False)
 
-    args.decoder_output_dim = getattr(args, 'decoder_output_dim', args.decoder_embed_dim)
-    args.decoder_input_dim = getattr(args, 'decoder_input_dim', args.decoder_embed_dim)
+@register_model_architecture('r_transformer', 'r_transformer_small')
+def speechtransformer_fbk(args):
+    args.dropout = getattr(args, 'dropout', 0.3)
+    args.normalization_constant = getattr(args, 'normalization_constant', 0.5)
+    args.attention_dropout = getattr(args, 'attention_dropout', 0.1)
+    args.relu_dropout = getattr(args, 'relu_dropout', 0.1)
+    args.conv_attention = getattr(args, 'conv_attention', False)
+
+    args.encoder_embed_dim = getattr(args, 'encoder_embed_dim', 128)
+    args.encoder_convolutions = getattr(args, 'encoder_convolutions', '[(16, 3, 3)] * 2')
+    args.encoder_layers = getattr(args, 'encoder_layers', 6)
+    args.encoder_ffn_embed_dim = getattr(args, 'encoder_ffn_embed_dim', 768)
+    args.encoder_attention_heads = getattr(args, 'encoder_attention_heads', 8)
+    args.encoder_learned_pos = getattr(args, 'encoder_learned_pos', False)
+    args.encoder_normalize_before = getattr(args, 'encoder_normalize_before', True)
+
+    args.decoder_embed_dim = getattr(args, 'decoder_embed_dim', 256)
+    args.decoder_layers = getattr(args, 'decoder_layers', 6)
+    args.decoder_out_embed_dim = getattr(args, 'decoder_out_embed_dim', 256)
+    args.decoder_ffn_embed_dim = getattr(args, 'decoder_ffn_embed_dim', 768)
+    args.decoder_output_dim = getattr(args, 'decoder_output_dim', 256)
+    args.decoder_attention_heads = getattr(args, 'decoder_attention_heads', 8)
+    args.decoder_learned_pos = getattr(args, 'decoder_learned_pos', False)
+    args.decoder_normalize_before = getattr(args, 'decoder_normalize_before', True)
 
 
-@register_model_architecture('speech_transformer', 'speech_transformer_iwslt')
-def transformer_iwslt_de_en(args):
-    args.encoder_embed_dim = getattr(args, 'encoder_embed_dim', 512)
+@register_model_architecture('r_transformer', 'r_transformer_small_conv')
+def speechtransformer_fbk(args):
+    args.dropout = getattr(args, 'dropout', 0.3)
+    args.normalization_constant = getattr(args, 'normalization_constant', 0.5)
+    args.attention_dropout = getattr(args, 'attention_dropout', 0.1)
+    args.relu_dropout = getattr(args, 'relu_dropout', 0.1)
+    args.conv_attention = getattr(args, 'conv_attention', True)
+
+    args.encoder_embed_dim = getattr(args, 'encoder_embed_dim', 128)
+    args.encoder_convolutions = getattr(args, 'encoder_convolutions', '[(16, 3, 3)] * 2')
+    args.encoder_layers = getattr(args, 'encoder_layers', 6)
     args.encoder_ffn_embed_dim = getattr(args, 'encoder_ffn_embed_dim', 1024)
     args.encoder_attention_heads = getattr(args, 'encoder_attention_heads', 4)
-    args.encoder_layers = getattr(args, 'encoder_layers', 6)
-    args.decoder_embed_dim = getattr(args, 'decoder_embed_dim', 512)
+    args.encoder_learned_pos = getattr(args, 'encoder_learned_pos', False)
+    args.encoder_normalize_before = getattr(args, 'encoder_normalize_before', True)
+
+    args.decoder_embed_dim = getattr(args, 'decoder_embed_dim', 256)
+    args.decoder_layers = getattr(args, 'decoder_layers', 6)
+    args.decoder_out_embed_dim = getattr(args, 'decoder_out_embed_dim', 256)
     args.decoder_ffn_embed_dim = getattr(args, 'decoder_ffn_embed_dim', 1024)
     args.decoder_attention_heads = getattr(args, 'decoder_attention_heads', 4)
+    args.decoder_learned_pos = getattr(args, 'decoder_learned_pos', False)
+    args.decoder_normalize_before = getattr(args, 'decoder_normalize_before', True)
+
+
+@register_model_architecture('r_transformer', 'r_transformer_medium')
+def speechtransformer_fbk(args):
+    args.dropout = getattr(args, 'dropout', 0.1)
+    args.normalization_constant = getattr(args, 'normalization_constant', 0.5)
+    args.attention_dropout = getattr(args, 'attention_dropout', 0.1)
+    args.relu_dropout = getattr(args, 'relu_dropout', 0.1)
+    args.share_decoder_input_output_embed = getattr(args, 'share_decoder_input_output_embed', False)
+
+    args.encoder_embed_dim = getattr(args, 'encoder_embed_dim', 128)
+    args.encoder_convolutions = getattr(args, 'encoder_convolutions', '[(8, 3, 3)] * 2')
+    args.encoder_layers = getattr(args, 'encoder_layers', 6)
+    args.encoder_ffn_embed_dim = getattr(args, 'encoder_ffn_embed_dim', 768)
+    args.encoder_attention_heads = getattr(args, 'encoder_attention_heads', 8)
+    args.encoder_learned_pos = getattr(args, 'encoder_learned_pos', False)
+    args.encoder_normalize_before = getattr(args, 'encoder_normalize_before', True)
+
+    args.decoder_embed_dim = getattr(args, 'decoder_embed_dim', 256)
     args.decoder_layers = getattr(args, 'decoder_layers', 6)
-    base_architecture(args)
+    args.decoder_out_embed_dim = getattr(args, 'decoder_out_embed_dim', 256)
+    args.decoder_ffn_embed_dim = getattr(args, 'decoder_ffn_embed_dim', 768)
+    args.decoder_attention_heads = getattr(args, 'decoder_attention_heads', 8)
+    args.decoder_learned_pos = getattr(args, 'decoder_learned_pos', False)
 
+@register_model_architecture('r_transformer', 'r_transformer_medium_red8')
+def speechtransformer_fbk_red8(args):
+    args.dropout = getattr(args, 'dropout', 0.1)
+    args.normalization_constant = getattr(args, 'normalization_constant', 0.5)
+    args.attention_dropout = getattr(args, 'attention_dropout', 0.1)
+    args.relu_dropout = getattr(args, 'relu_dropout', 0.1)
+    args.share_decoder_input_output_embed = getattr(args, 'share_decoder_input_output_embed', False)
 
+    args.encoder_embed_dim = getattr(args, 'encoder_embed_dim', 128)
+    args.encoder_convolutions = getattr(args, 'encoder_convolutions', '[(16, 3, 3)] * 3')
+    args.encoder_layers = getattr(args, 'encoder_layers', 6)
+    args.encoder_ffn_embed_dim = getattr(args, 'encoder_ffn_embed_dim', 768)
+    args.encoder_attention_heads = getattr(args, 'encoder_attention_heads', 8)
+    args.encoder_learned_pos = getattr(args, 'encoder_learned_pos', False)
+    args.encoder_normalize_before = getattr(args, 'encoder_normalize_before', True)
 
-
-# parameters used in the "Attention Is All You Need" paper (Vaswani, et al, 2017)
-@register_model_architecture('speech_transformer', 'transformer_speech_big')
-def transformer_vaswani_wmt_en_de_big(args):
-    args.encoder_embed_dim = getattr(args, 'encoder_embed_dim', 1024)
-    args.encoder_ffn_embed_dim = getattr(args, 'encoder_ffn_embed_dim', 4096)
-    args.encoder_attention_heads = getattr(args, 'encoder_attention_heads', 16)
-    args.encoder_normalize_before = getattr(args, 'encoder_normalize_before', False)
-    args.decoder_embed_dim = getattr(args, 'decoder_embed_dim', 1024)
-    args.decoder_ffn_embed_dim = getattr(args, 'decoder_ffn_embed_dim', 4096)
-    args.decoder_attention_heads = getattr(args, 'decoder_attention_heads', 16)
-    args.dropout = getattr(args, 'dropout', 0.3)
-    base_architecture(args)
-
-
+    args.decoder_embed_dim = getattr(args, 'decoder_embed_dim', 256)
+    args.decoder_layers = getattr(args, 'decoder_layers', 6)
+    args.decoder_out_embed_dim = getattr(args, 'decoder_out_embed_dim', 256)
+    args.decoder_ffn_embed_dim = getattr(args, 'decoder_ffn_embed_dim', 768)
+    args.decoder_attention_heads = getattr(args, 'decoder_attention_heads', 8)
+    args.decoder_learned_pos = getattr(args, 'decoder_learned_pos', False)
