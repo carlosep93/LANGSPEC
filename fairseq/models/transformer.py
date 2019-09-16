@@ -155,6 +155,8 @@ class TransformerLanguageModel(FairseqLanguageModel):
         """Add model-specific arguments to the parser."""
         parser.add_argument('--dropout', default=0.1, type=float, metavar='D',
                             help='dropout probability')
+        parser.add_argument('--relu_dropout', default=0.1, type=float, metavar='D',
+                            help='relu dropout probability')
         parser.add_argument('--attention-dropout', default=0., type=float, metavar='D',
                             help='dropout probability for attention weights')
         parser.add_argument('--relu-dropout', default=0., type=float, metavar='D',
