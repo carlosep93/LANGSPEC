@@ -377,6 +377,7 @@ def add_encode_args(parser):
     group = parser.add_argument_group('Encode')
     group.add_argument('--output-file',default='output.json',type=str,help='Output json file')
     group.add_argument('--n-points',default=100,type=int,help='Number of sentences to encode')
+    group.add_argument('--maxlength',default=220,type=int,help='Sentence length to pad to')
     group.add_argument('--layer',default=5,type=int,help='layer to decode from')
     return group
 

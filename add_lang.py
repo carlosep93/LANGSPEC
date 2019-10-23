@@ -74,11 +74,14 @@ def main(args):
     )
 
     #Load partial previous model
+    print('Load  partial model')
     load_previous_model(args,trainer)
 
+    '''
     # Load the latest checkpoint if one is available
     if not load_checkpoint(args, trainer, epoch_itr):
         trainer.dummy_train_step([dummy_batch])
+    '''
 
     # Train until the learning rate gets too small
     max_epoch = args.max_epoch or math.inf
@@ -335,6 +338,7 @@ def load_previous_model(args, trainer):
     """Load a checkpoint and replay dataloader to match."""
     os.makedirs(args.save_dir, exist_ok=True)
     checkpoint_path = os.path.join(args.prev_model, args.restore_file)
+    print(checkpoint_path)
     if os.path.isfile(checkpoint_path):
         trainer.load_partial_checkpoint(checkpoint_path,args.key, args.newkey, args.reuse, args.reset_optimizer, args.reset_lr_scheduler,
                                               eval(args.optimizer_overrides))

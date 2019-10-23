@@ -12,7 +12,7 @@ import numpy as np
 from fairseq import search, utils
 from fairseq.models import FairseqIncrementalDecoder
 
-import matplotlib.pyplot as plot
+#import matplotlib.pyplot as plot
 
 class SpeechSequenceGenerator(object):
     def __init__(

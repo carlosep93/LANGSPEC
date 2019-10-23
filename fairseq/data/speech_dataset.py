@@ -277,14 +277,17 @@ class SpeechDataset(torch.utils.data.Dataset):
     def __getitem__(self, i):
         key, path = self.wavs[i]
         #params = mel_spectrogram(path, self.window_size, self.window_stride, self.window_type, self.normalize, self.max_len,self.n_mels)  # pylint: disable=line-too-long
-        sound, sample_rate = torchaudio.load_wav(path)
-        output = kaldi.fbank(
-            sound,
-            num_mel_bins=self.n_mels,
-            frame_length=self.window_size,
-            frame_shift=self.window_stride
-        )
-        params = speech_data_utils.apply_mv_norm(output).t()
+        try: 
+            sound, sample_rate = torchaudio.load_wav(path)
+            output = kaldi.fbank(
+                sound,
+                num_mel_bins=self.n_mels,
+                frame_length=self.window_size,
+                frame_shift=self.window_stride
+            )
+            params = speech_data_utils.apply_mv_norm(output).t()
+        except:
+            params = torch.FloatTensor(np.zeros((self.n_mels,100)))
         if self.transform:
             params = self.transform(params)
         if self.masked:

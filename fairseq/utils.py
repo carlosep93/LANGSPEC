@@ -98,6 +98,7 @@ def load_partial_model_state(filename, model,key,newkey,reuse):
     state = torch.load(filename, map_location=lambda s, l: default_restore_location(s, 'cpu'))
     state = _upgrade_state_dict(state)
     state['model'] = OrderedDict({k.replace(key,newkey):v for k,v in state['model'].items() if key + '.' + reuse in k})
+    print('state', list(state['model'].keys()))
 
     model.upgrade_state_dict(state['model'])
 
@@ -190,12 +191,15 @@ def load_partial_model_for_inference(enc_filename,enc_key, dec_filename, dec_key
     enc_state = torch.load(enc_filename, map_location=lambda s, l: default_restore_location(s, 'cpu'))
     enc_state = _upgrade_state_dict(enc_state)
     enc_state['model'] = OrderedDict({k.replace(enc_key,newkey):v for k,v in enc_state['model'].items() if enc_key + '.' + 'encoder' in k})
+    print('enc_state', list(enc_state['model'].keys()))
     print('Encoder params', len(enc_state['model']))
+
     if not os.path.exists(dec_filename):
             raise IOError('Model file not found: {}'.format(dec_filename))
     dec_state = torch.load(dec_filename, map_location=lambda s, l: default_restore_location(s, 'cpu'))
     dec_state = _upgrade_state_dict(dec_state)
     dec_state['model'] = OrderedDict({k.replace(dec_key,newkey):v for k,v in dec_state['model'].items() if dec_key + '.' + 'decoder' in k})
+    print('dec_state', list(dec_state['model'].keys()))
 
     args = dec_state['args']
     args.task = newtask

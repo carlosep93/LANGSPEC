@@ -158,8 +158,10 @@ class Trainer(object):
 
     def load_partial_checkpoint(self, filename,key,newkey, reuse,reset_optimizer=False, reset_lr_scheduler=False, optimizer_overrides=None):
         """Load all training state from a checkpoint file."""
+        print('Load partial state from utils')
         extra_state, self._optim_history, last_optim_state = \
             utils.load_partial_model_state(filename,self.get_model(),key,newkey,reuse)
+
         if last_optim_state is not None and not reset_optimizer:
             # rebuild optimizer after loading model, since params may have changed
             self._build_optimizer()
@@ -187,6 +189,7 @@ class Trainer(object):
                     meter.reset()
 
         #Freeze pretrained part of the model
+        print('freezing', reuse)
         module = self.model.encoder if reuse == 'encoder' else self.model.decoder
         module.train(False)
         for p in module.parameters():
