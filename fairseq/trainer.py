@@ -156,10 +156,10 @@ class Trainer(object):
         return extra_state
 
 
-    def load_partial_checkpoint(self, filename,key,newkey, reuse,reset_optimizer=False, reset_lr_scheduler=False, optimizer_overrides=None):
+    def load_partial_checkpoint(self, filename,key,newkey, reuse,reset_optimizer=False, reset_lr_scheduler=False, optimizer_overrides=None, finetune=False):
         """Load all training state from a checkpoint file."""
         extra_state, self._optim_history, last_optim_state = \
-            utils.load_partial_model_state(filename,self.get_model(),key,newkey,reuse)
+            utils.load_partial_model_state(filename,self.get_model(),key,newkey,reuse,finetune)
         if last_optim_state is not None and not reset_optimizer:
             # rebuild optimizer after loading model, since params may have changed
             self._build_optimizer()

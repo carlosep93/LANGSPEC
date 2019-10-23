@@ -92,13 +92,15 @@ def load_mix_model_state(model,enc_filename, dec_filename, enckey, deckey, newke
 
     return None, [], None
 
-def load_partial_model_state(filename, model,key,newkey,reuse):
+def load_partial_model_state(filename, model,key,newkey,reuse,finetune):
     if not os.path.exists(filename):
         return None, [], None
     state = torch.load(filename, map_location=lambda s, l: default_restore_location(s, 'cpu'))
     state = _upgrade_state_dict(state)
-    state['model'] = OrderedDict({k.replace(key,newkey):v for k,v in state['model'].items() if key + '.' + reuse in k})
-
+    if not finetune:
+        state['model'] = OrderedDict({k.replace(key,newkey):v for k,v in state['model'].items() if key + '.' + reuse in k})
+    else:
+        state['model'] = OrderedDict({k.replace(key,newkey):v for k,v in state['model'].items()})
     model.upgrade_state_dict(state['model'])
 
     # load model parameters

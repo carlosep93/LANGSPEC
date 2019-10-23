@@ -414,6 +414,7 @@ def add_lang_args(parser):
     group.add_argument('--newkey', default='en-en',type=str, help='Key in new model')
     group.add_argument('--prev-model',default='',type=str, help='Path to previous model')
     group.add_argument('--reuse',default='encoder',type=str, help='Which part of the previous model to use', choices=['encoder','decoder'])
+    group.add_argument('--finetune',default='False',type=str, help='Fine tune parameters from a previous language', choices=['True','False'])
 
 def add_model_args(parser):
     group = parser.add_argument_group('Model configuration')
