@@ -156,7 +156,7 @@ class Trainer(object):
         return extra_state
 
 
-    def load_partial_checkpoint(self, filename,key,newkey, reuse,reset_optimizer=False, reset_lr_scheduler=False, optimizer_overrides=None, finetune=False):
+    def load_partial_checkpoint(self, filename,key,newkey, reuse,reset_optimizer=False, reset_lr_scheduler=False, optimizer_overrides=None, finetune=False,path=None):
         """Load all training state from a checkpoint file."""
         extra_state, self._optim_history, last_optim_state = \
             utils.load_partial_model_state(filename,self.get_model(),key,newkey,reuse,finetune)
@@ -187,10 +187,22 @@ class Trainer(object):
                     meter.reset()
 
         #Freeze pretrained part of the model
-        module = self.model.encoder if reuse == 'encoder' else self.model.decoder
-        module.train(False)
-        for p in module.parameters():
-            p.requires_grad = False
+        if reuse in ['encoder','both']:
+            self.model.encoder.train(False)
+            for p in self.model.encoder.parameters():
+                p.requires_grad = False
+
+        if reuse in ['decoder','both']:
+            self.model.decoder.train(False)
+            for p in self.model.decoder.parameters():
+                p.requires_grad = False
+
+
+        if reuse == 'both':
+            m =    self.model.encoder.embed_tokens
+            m.train(True)
+            for p in m.parameters():
+                p.requires_grad = True
 
 
         return extra_state

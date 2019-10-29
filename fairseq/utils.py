@@ -11,6 +11,7 @@ import os
 import re
 import torch
 import traceback
+import numpy as np
 
 from torch.serialization import default_restore_location
 
@@ -92,7 +93,21 @@ def load_mix_model_state(model,enc_filename, dec_filename, enckey, deckey, newke
 
     return None, [], None
 
-def load_partial_model_state(filename, model,key,newkey,reuse,finetune):
+def load_pretrained_embeddings(path):
+    with open(path) as f:
+        tokens, dim = f.readline().split()
+        #Init weights reserving first possitions for <Lua heritage> pad </s> <unk>
+        weights = np.empty((int(tokens)+4,int(dim)),dtype='float')
+        weights[1] = np.zeros(int(dim),dtype='float')
+        i = 4
+        for l in f.readlines():
+            word, vec = l.split(' ',1)
+            weights[i] = np.fromstring(vec,dtype='float')
+            i += 1
+        return weights
+
+
+def load_partial_model_state(filename, model,key,newkey,reuse,finetune,path=None):
     if not os.path.exists(filename):
         return None, [], None
     state = torch.load(filename, map_location=lambda s, l: default_restore_location(s, 'cpu'))
@@ -101,6 +116,8 @@ def load_partial_model_state(filename, model,key,newkey,reuse,finetune):
         state['model'] = OrderedDict({k.replace(key,newkey):v for k,v in state['model'].items() if key + '.' + reuse in k})
     else:
         state['model'] = OrderedDict({k.replace(key,newkey):v for k,v in state['model'].items()})
+        if path:
+            state['model']['.'.join(['model',newkey,reuse,'embed_tokens','weight'])] = load_pretrained_embeddings(path)
     model.upgrade_state_dict(state['model'])
 
     # load model parameters
