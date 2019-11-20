@@ -208,6 +208,11 @@ class Trainer(object):
         return extra_state
 
 
+    def load_nli_encoder(self,task,model):
+        checkpoint = task.encoder_path()
+        key = task.encoder_key()
+        utils.get_nli_encoder(model,key,checkpoint)
+
 
 
     def load_checkpoint(self, filename, reset_optimizer=False, reset_lr_scheduler=False, optimizer_overrides=None):

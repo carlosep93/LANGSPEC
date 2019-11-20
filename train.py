@@ -82,6 +82,9 @@ def main(args):
     if not load_checkpoint(args, trainer, epoch_itr) and  not 'speech' in args.task:
         trainer.dummy_train_step([dummy_batch])
 
+    if 'nli' in args.task:
+        load_nli_encoder(task,model,trainer)
+
     # Train until the learning rate gets too small
     max_epoch = args.max_epoch or math.inf
     max_update = args.max_update or math.inf
@@ -324,6 +327,8 @@ def save_checkpoint(args, trainer, epoch_itr, val_loss):
         for old_chk in checkpoints[args.keep_interval_updates:]:
             os.remove(old_chk)
 
+def load_nli_encoder(task,model, trainer):
+    trainer.load_nli_encoder(task,model)
 
 def load_checkpoint(args, trainer, epoch_itr):
     """Load a checkpoint and replay dataloader to match."""

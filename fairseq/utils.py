@@ -107,6 +107,17 @@ def load_pretrained_embeddings(path):
         return weights
 
 
+def get_nli_encoder(model,key,filename):
+    state = torch.load(filename, map_location=lambda s, l: default_restore_location(s, 'cpu'))
+    current_state = model.state_dict()
+    if not key is None:
+        state['model'] = OrderedDict({k:v for k,v in state['model'].items() if '.'.join(['models',key,'encoder']) in k})
+        state['model'] = OrderedDict({k.replace('models.' + key + '.',''):v for k,v in state['model'].items()})
+    for k,v in state['model'].items():
+        current_state[k] = v
+    model.load_state_dict(current_state)
+
+
 def load_partial_model_state(filename, model,key,newkey,reuse,finetune,path=None):
     if not os.path.exists(filename):
         return None, [], None
