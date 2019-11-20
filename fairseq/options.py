@@ -394,7 +394,7 @@ def add_generate_add_lang_args(parser):
     group.add_argument('--dec-key', default='en-en',type=str, help='Key in the model dictionary to load the decoder')
     group.add_argument('--newkey', default='en-en',type=str, help='Key in new model')
     group.add_argument('--newtask', default='multilingual_translation',type=str, help='Task to perform by the resultant model')
-    group.add_argument('--newarch', default='multilingua_transformer',type=str, help='Architecture of the resultant model')
+    group.add_argument('--embs-path', default='',type=str, help='Embeddings path for transfer learning')
     return group
 
 
@@ -413,7 +413,7 @@ def add_lang_args(parser):
     group.add_argument('--key', default='en-en',type=str, help='Key in pretrained model')
     group.add_argument('--newkey', default='en-en',type=str, help='Key in new model')
     group.add_argument('--prev-model',default='',type=str, help='Path to previous model')
-    group.add_argument('--reuse',default='encoder',type=str, help='Which part of the previous model to use', choices=['encoder','decoder'])
+    group.add_argument('--reuse',default='encoder',type=str, help='Which part of the previous model to use', choices=['encoder','decoder','both'])
     group.add_argument('--finetune',default='False',type=str, help='Fine tune parameters from a previous language', choices=['True','False'])
 
 def add_model_args(parser):
