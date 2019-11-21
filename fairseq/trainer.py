@@ -212,6 +212,10 @@ class Trainer(object):
         checkpoint = task.encoder_path()
         key = task.encoder_key()
         utils.get_nli_encoder(model,key,checkpoint)
+        model.encoder.train(False)
+        for p in self.model.encoder.parameters():
+            p.requires_grad = False
+
 
 
 
