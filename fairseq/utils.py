@@ -255,6 +255,34 @@ def load_partial_model_for_inference(enc_filename,enc_key, dec_filename, dec_key
     return [model],args
 
 
+def load_nli_model_for_inference(path,task, model_arg_overrides=None,pair=None):
+    if not os.path.exists(path):
+            raise IOError('Model file not found: {}'.format(path))
+    if not os.path.exists(task.enc_path):
+        raise IOError('Model file not found: {}'.format(task.enc_path))
+
+    #load encoder state from previous model
+    enc_state = torch.load(task.enc_path, map_location=lambda s, l: default_restore_location(s, 'cpu'))
+    if not task.enc_key is None:
+        enc_state['model'] = OrderedDict({k:v for k,v in enc_state['model'].items() if '.'.join(['models',task.enc_key,'encoder']) in k})
+        enc_state['model'] = OrderedDict({k.replace('models.' + task.enc_key + '.',''):v for k,v in enc_state['model'].items()})
+
+    #Load classifier weights
+    state = torch.load(path, map_location=lambda s, l: default_restore_location(s, 'cpu'))
+    state['model'] = OrderedDict({k:v for k,v in state['model'].items() if 'classifier' in k})
+
+    #Join models
+    state['model'].update(enc_state['model'])
+
+    state = _upgrade_state_dict(state)
+    args = state['args']
+
+    model = task.build_model(args)
+    model.upgrade_state_dict(state['model'])
+    model.load_state_dict(state['model'], strict=False)
+
+    return model
+
 def load_ensemble_for_inference(filenames, task, model_arg_overrides=None,pair=None):
     """Load an ensemble of models for inference.
 
