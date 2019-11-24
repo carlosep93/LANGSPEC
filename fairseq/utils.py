@@ -113,6 +113,8 @@ def get_nli_encoder(model,key,filename):
     if not key is None:
         state['model'] = OrderedDict({k:v for k,v in state['model'].items() if '.'.join(['models',key,'encoder']) in k})
         state['model'] = OrderedDict({k.replace('models.' + key + '.',''):v for k,v in state['model'].items()})
+    else:
+        state['model'] = OrderedDict({k:v for k,v in state['model'].items() if 'encoder.' in k})
     for k,v in state['model'].items():
         current_state[k] = v
     model.load_state_dict(current_state)
@@ -266,7 +268,8 @@ def load_nli_model_for_inference(path,task, model_arg_overrides=None,pair=None):
     if not task.enc_key is None:
         enc_state['model'] = OrderedDict({k:v for k,v in enc_state['model'].items() if '.'.join(['models',task.enc_key,'encoder']) in k})
         enc_state['model'] = OrderedDict({k.replace('models.' + task.enc_key + '.',''):v for k,v in enc_state['model'].items()})
-
+    else:
+        enc_state['model'] = OrderedDict({k:v for k,v in enc_state['model'].items() if 'encoder.' in k})
     #Load classifier weights
     state = torch.load(path, map_location=lambda s, l: default_restore_location(s, 'cpu'))
     state['model'] = OrderedDict({k:v for k,v in state['model'].items() if 'classifier' in k})
