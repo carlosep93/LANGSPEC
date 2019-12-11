@@ -178,32 +178,3 @@ class TranslationTask(FairseqTask):
         """Return the target :class:`~fairseq.data.Dictionary`."""
         return self.tgt_dict
 
-    def train_step(self, sample, model, criterion, optimizer, ignore_grad=False):
-        model.train()
-        agg_loss, agg_sample_size, agg_logging_output = 0., 0., {}
-        for lang_pair in self.args.lang_pairs:
-            if sample[lang_pair] is None or len(sample[lang_pair]) == 0:
-                continue
-            loss, sample_size, logging_output = criterion(model.models[lang_pair], sample[lang_pair])
-            if ignore_grad:
-                loss *= 0
-            optimizer.backward(loss)
-            agg_loss += loss.detach().item()
-            # TODO make summing of the sample sizes configurable
-            agg_sample_size += sample_size
-            agg_logging_output[lang_pair] = logging_output
-        return agg_loss, agg_sample_size, agg_logging_output
-
-    def valid_step(self, sample, model, criterion):
-        model.eval()
-        with torch.no_grad():
-            agg_loss, agg_sample_size, agg_logging_output = 0., 0., {}
-            for lang_pair in self.args.lang_pairs:
-                if sample[lang_pair] is None or len(sample[lang_pair]) == 0:
-                    continue
-                loss, sample_size, logging_output = criterion(model.models[lang_pair], sample[lang_pair])
-                agg_loss += loss.data.item()
-                # TODO make summing of the sample sizes configurable
-                agg_sample_size += sample_size
-                agg_logging_output[lang_pair] = logging_output
-        return agg_loss, agg_sample_size, agg_logging_output
