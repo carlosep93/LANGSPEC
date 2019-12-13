@@ -54,6 +54,8 @@ class InterlinguaTransformerModel(FairseqInterlinguaModel):
                             help='share encoders across languages')
         parser.add_argument('--share-decoders', action='store_true',
                             help='share decoders across languages')
+        parser.add_argument('--tie-lang-embeddings', action='store_true',
+                            help='tie embedding table by language')
 
     @classmethod
     def build_model(cls, args, task):
@@ -73,6 +75,10 @@ class InterlinguaTransformerModel(FairseqInterlinguaModel):
         print('*******************')
         src_langs = [lang_pair.split('-')[0] for lang_pair in args.lang_pairs]
         tgt_langs = [lang_pair.split('-')[1] for lang_pair in args.lang_pairs]
+
+
+        lang_embeddings = {}
+
 
         if args.share_encoders:
             args.share_encoder_embeddings = True
@@ -125,44 +131,52 @@ class InterlinguaTransformerModel(FairseqInterlinguaModel):
         # encoders/decoders for each language
         lang_encoders, lang_decoders = {}, {}
 
-        def get_encoder(lang):
+        def get_encoder(args,lang):
             if lang not in lang_encoders:
                 if shared_encoder_embed_tokens is not None:
                     encoder_embed_tokens = shared_encoder_embed_tokens
+                elif args.tie_lang_embeddings and lang in lang_embeddings:
+                    encoder_embed_tokens = lang_embeddings[lang]
                 else:
                     encoder_embed_tokens = build_embedding(
                         task.dicts[lang], args.encoder_embed_dim, args.encoder_embed_path
                     )
+                    if args.tie_lang_embeddings:
+                        lang_embeddings[lang] = encoder_embed_tokens
                 pos = sorted(src_langs).index(lang)
                 lang_encoders[lang] = TransformerEncoder(args, task.dicts[lang], encoder_embed_tokens).to('cuda:' + str(pos)) \
                                         if torch.cuda.device_count() > 1 else \
                                         TransformerEncoder(args, task.dicts[lang], encoder_embed_tokens)
             return lang_encoders[lang]
 
-        def get_decoder(lang):
+        def get_decoder(args,lang):
             if lang not in lang_decoders:
                 if shared_decoder_embed_tokens is not None:
                     decoder_embed_tokens = shared_decoder_embed_tokens
+                elif args.tie_lang_embeddings and lang in lang_embeddings:
+                    decoder_embed_tokens = lang_embeddings[lang]
                 else:
                     decoder_embed_tokens = build_embedding(
                         task.dicts[lang], args.decoder_embed_dim, args.decoder_embed_path
                     )
+                    if args.tie_lang_embeddings:
+                        lang_embeddings[lang] = decoder_embed_tokens
                 lang_decoders[lang] = TransformerDecoder(args, task.dicts[lang], decoder_embed_tokens)
             return lang_decoders[lang]
 
 
-        def try_decoder(src,tgt):
+        def try_decoder(args,src,tgt):
             try:
-                return shared_decoder if shared_decoder is not None else get_decoder(src)
+                return shared_decoder if shared_decoder is not None else get_decoder(args,src)
             except KeyError:
-                return shared_decoder if shared_decoder is not None else get_decoder(tgt)
+                return shared_decoder if shared_decoder is not None else get_decoder(args,tgt)
 
 
-        def try_encoder(tgt,src):
+        def try_encoder(args,tgt,src):
             try:
-                return shared_encoder if shared_encoder is not None else get_encoder(tgt)
+                return shared_encoder if shared_encoder is not None else get_encoder(args,tgt)
             except KeyError:
-                return shared_encoder if shared_encoder is not None else get_encoder(src)
+                return shared_encoder if shared_encoder is not None else get_encoder(args,src)
 
         # shared encoders/decoders (if applicable)
         shared_encoder, shared_decoder = None, None
@@ -174,8 +188,8 @@ class InterlinguaTransformerModel(FairseqInterlinguaModel):
 
         for lang_pair, src, tgt in zip(args.lang_pairs, src_langs, tgt_langs):
             lang_pair = lang_pair.split('-')
-            lang_encoders[lang_pair[0]] = try_encoder(src,tgt)
-            lang_decoders[lang_pair[1]] = try_decoder(tgt,src)
+            lang_encoders[lang_pair[0]] = try_encoder(args,src,tgt)
+            lang_decoders[lang_pair[1]] = try_decoder(args,tgt,src)
 
         auto = task.auto if hasattr(task,'auto') else False
         return InterlinguaTransformerModel(lang_encoders, lang_decoders,auto)
@@ -191,6 +205,7 @@ def base_interlingua_architecture(args):
     args.share_decoder_embeddings = getattr(args, 'share_decoder_embeddings', False)
     args.share_encoders = getattr(args, 'share_encoders', False)
     args.share_decoders = getattr(args, 'share_decoders', False)
+    args.tie_lang_embeddings = getattr(args,'tie_lang_embeddings',False)
 
 @register_model_architecture('interlingua_transformer', 'interlingua_transformer')
 def multilingual_transformer_iwslt_de_en(args):

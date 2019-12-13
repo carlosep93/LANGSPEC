@@ -84,6 +84,8 @@ class NliClassifierModel(BaseFairseqModel):
                                  'Must be used with adaptive_loss criterion'),
         parser.add_argument('--adaptive-softmax-dropout', type=float, metavar='D',
                             help='sets adaptive softmax dropout for the tail projections')
+        parser.add_argument('--tie-lang-embeddings', type=float, metavar='D',
+                            help='shared lang-enbeddings lang encoder-decoder')
 
     @classmethod
     def build_model(cls, args, task):
@@ -98,6 +100,10 @@ class NliClassifierModel(BaseFairseqModel):
             args.max_hypothesis_positions = 1024
 
         ref_dict, hyp_dict = task.ref_dictionary, task.hyp_dictionary
+
+
+        #def get_or_build_embedding(lang_embs,dictionary,embed_dim, path=None):
+
 
         def build_embedding(dictionary, embed_dim, path=None):
             num_embeddings = len(dictionary)
