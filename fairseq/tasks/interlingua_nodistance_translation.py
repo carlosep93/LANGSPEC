@@ -7,7 +7,7 @@
 
 from collections import OrderedDict
 import os
-
+import math
 import torch
 
 from fairseq import options
@@ -68,6 +68,8 @@ class InterlinguaNoDistanceTranslationTask(FairseqTask):
                             help='comma-separated list of freeze or non freeze modules in training order')
         parser.add_argument('--auto-encoding', default='False', type=str, metavar='BOOL',
                             help='use autoencoders during training')
+        parser.add_argument('--adapt-schedule', default='False', type=str, metavar='BOOL',
+                            help='adapt freezing schedule after each epoch')
 
     def __init__(self, args, dicts, training):
         super().__init__(args)
@@ -82,6 +84,7 @@ class InterlinguaNoDistanceTranslationTask(FairseqTask):
         args.freeze_schedule = args.freeze_schedule.split(',')
         args.left_pad_source = options.eval_bool(args.left_pad_source)
         args.left_pad_target = options.eval_bool(args.left_pad_target)
+        args.adapt_schedule = options.eval_bool(args.adapt_schedule)
 
         if args.source_lang is not None or args.target_lang is not None:
             if args.lang_pairs is not None:
@@ -206,12 +209,12 @@ class InterlinguaNoDistanceTranslationTask(FairseqTask):
         return model
 
     def unfreeze_module(self,model,lang_pair,schedule):
-        #freeze encoder if required by schedule
+        #unfreeze encoder if required by schedule
         if schedule[0] == 'f':
             model.models[lang_pair].encoder.train()
             for p in model.models[lang_pair].encoder.parameters():
                 p.requires_grad = True
-        #freeze decoder if required by schedule
+        #unfreeze decoder if required by schedule
         if schedule[1] == 'f':
             model.models[lang_pair].decoder.train()
             for p in  model.models[lang_pair].decoder.parameters():
@@ -238,6 +241,56 @@ class InterlinguaNoDistanceTranslationTask(FairseqTask):
             model = self.unfreeze_module(model,lang_pair,schedule)
         return agg_loss, agg_sample_size, agg_logging_output
 
+
+    def adapt_schedule(self,logging,n):
+        # find lang pairs without repetition
+        lang_pairs =  {}
+        for lp in self.args.lang_pairs:
+            rev_lp =  '-'.join(lp.split('-')[::-1])
+            print(lp,rev_lp)
+            if not lp in lang_pairs and not rev_lp in lang_pairs:
+                lang_pairs[lp] = (logging[lp]['loss'] + logging[rev_lp]['loss']) / 2.0
+
+        # Select pair that will not be frozen the following epoch
+        # criterion: Maximum loss pair that does not overlap with previously
+        # chosen pairs
+        aux_pairs = lang_pairs.copy()
+        no_freeze_pairs = []
+        for _ in range(math.ceil(n/2.0)):
+            max_pair = max(list(aux_pairs.items()), key= lambda l:l[1])
+            l1,l2 = max_pair[0].split('-')
+            del_keys = [k for k in aux_pairs.keys() if l1 in k or l2 in k]
+            for k in del_keys:
+                del aux_pairs[k]
+            no_freeze_pairs.append(max_pair[0])
+            no_freeze_pairs.append('-'.join(max_pair[0].split('-')[::-1]))
+
+        # Create frozen paths between the rest of language pairs
+        # to ensure the flow of information between all languages
+        freeze_pairs = []
+        freeze_sc = []
+        curr = first = list(self.dicts.keys())[0]
+        end = len(self.dicts.keys()) == 2
+        while not end:
+            for l in self.dicts.keys():
+                if '-'.join([curr,l]) not in no_freeze_pairs and '-'.join([curr,l]) not in freeze_pairs and  not curr == l:
+                    freeze_pairs.append('-'.join([curr,l]))
+                    freeze_sc.append('n-f')
+                    freeze_pairs.append('-'.join([l,curr]))
+                    freeze_sc.append('f-n')
+                    curr = l
+                    end = curr == first
+                    break
+
+        #Close the circle with the following language
+        pairs = no_freeze_pairs
+        schedule = ['n-n']*len(pairs)
+        pairs += freeze_pairs
+        schedule += freeze_sc
+
+        return pairs, schedule
+
+
     def valid_step(self, sample, model, criterion):
         model.eval()
         with torch.no_grad():
@@ -250,6 +303,16 @@ class InterlinguaNoDistanceTranslationTask(FairseqTask):
                 # TODO make summing of the sample sizes configurable
                 agg_sample_size += sample_size
                 agg_logging_output[lang_pair] = logging_output
+        if self.args.adapt_schedule:
+           pairs,schedule = self.adapt_schedule(agg_logging_output,len(self.dicts))
+           print('***************')
+           print('* NEW TRAINING SCHEDULE')
+           print('* lang pairs:', pairs)
+           print('* schedule:', schedule)
+           print('***************')
+           self.args.lang_pairs = pairs
+           self.args.freeze_schedule = schedule
+
         return agg_loss, agg_sample_size, agg_logging_output
 
     def init_logging_output(self, sample):
