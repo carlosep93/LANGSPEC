@@ -71,56 +71,7 @@ def main(args):
         json.dump(embedding_dict,f)
     print('Done')
 
-    '''
-    # Load alignment dictionary for unknown word replacement
-    # (None if no unknown word replacement, empty if no path to align dictionary)
-    align_dict = utils.load_align_dict(args.replace_unk)
-
-    # Load dataset (possibly sharded)
-    itr = task.get_batch_iterator(
-        dataset=task.dataset(args.gen_subset),
-        max_tokens=args.max_tokens,
-        max_sentences=args.max_sentences,
-        max_positions=utils.resolve_max_positions(
-            task.max_positions(),
-            *[model.max_positions() for model in models]
-        ),
-        ignore_invalid_inputs=args.skip_invalid_size_inputs_valid_test,
-        required_batch_size_multiple=8,
-        num_shards=args.num_shards,
-        shard_id=args.shard_id,
-    ).next_epoch_itr(shuffle=False)
-
-    # Initialize generator
-    gen_timer = StopwatchMeter()
-
-    encoder = SequenceEncoder(models, task.target_dictionary)
-
-
-    if use_cuda:
-        encoder.cuda()
-
-    # Generate and compute BLEU score
-    num_sentences = 0
-    has_target = True
-    with progress_bar.build_progress_bar(args, itr) as t:
-        encodings = encoder.encode_batched_itr(t, cuda=use_cuda, timer=gen_timer)
-        data = {}
-        i = 0
-        for id,src,ref,hypos in encodings:
-            if i >= args.n_points:
-                break
-            data[str(id.cpu().data.numpy())] = {
-                'src':src.cpu().data.numpy().tolist(),
-                'ref':ref.cpu().data.numpy().tolist(),
-                'encoding':hypos[0]['encoding'].cpu().data.numpy().tolist()
-            }
-            i += 1
-    with open(args.output_file,'w') as f:
-        json.dump(data,f)
-    print('Done')
-    '''
-
+    
 if __name__ == '__main__':
     parser = options.get_generation_parser()
     options.add_encode_args(parser)

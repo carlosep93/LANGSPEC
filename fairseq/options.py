@@ -395,6 +395,7 @@ def add_generate_add_lang_args(parser):
     group.add_argument('--newkey', default='en-en',type=str, help='Key in new model')
     group.add_argument('--newtask', default='multilingual_translation',type=str, help='Task to perform by the resultant model')
     group.add_argument('--embs-path', default='',type=str, help='Embeddings path for transfer learning')
+    group.add_argument('--newarch', default='multilingua_transformer',type=str, help='Architecture of the resultant model')
     return group
 
 

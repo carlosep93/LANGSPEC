@@ -86,6 +86,10 @@ class NliClassifierModel(BaseFairseqModel):
                             help='sets adaptive softmax dropout for the tail projections')
         parser.add_argument('--tie-lang-embeddings', type=float, metavar='D',
                             help='shared lang-enbeddings lang encoder-decoder')
+        parser.add_argument('--class-hidden-size', type=int, metavar='N',
+                            help='classifier hidden size')
+        parser.add_argument('--class-dropout', type=float, metavar='D',
+                            help='classifier dropout')
 
     @classmethod
     def build_model(cls, args, task):
@@ -139,9 +143,9 @@ class NliClassifierModel(BaseFairseqModel):
 
         encoder = TransformerEncoder(args, ref_dict, encoder_embed_tokens)
         classifier = nn.ModuleList([
-            torch.nn.Linear(args.encoder_embed_dim*4,128),
-            torch.nn.ReLU(),
-            torch.nn.Linear(128,3),
+            torch.nn.Dropout(args.class_dropout),
+            torch.nn.Linear(args.encoder_embed_dim*4,args.class_hidden_size),
+            torch.nn.Linear(args.class_hidden_size,3),
             torch.nn.Softmax()
         ])
         return NliClassifierModel(encoder, classifier)
