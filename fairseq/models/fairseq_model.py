@@ -8,6 +8,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from fairseq.greedy_generator import GreedyGenerator
 from collections import OrderedDict
 
 from . import FairseqDecoder, FairseqEncoder
@@ -169,6 +170,80 @@ class FairseqModel(BaseFairseqModel):
         return (self.encoder.max_positions(), self.decoder.max_positions())
 
 
+class UnsupervisedFairseqModel(BaseFairseqModel):
+    """Base class for the unsupervised interlingual model.
+
+    Args:
+        encoder (FairseqEncoder): the encoder
+        decoder (FairseqDecoder): the decoder
+        pivot_encoder (FairseqEncoder): frozen encoder
+        pivot_decoder (FairseqDecoder): frozen decoder
+    """
+
+    def __init__(self, encoder, decoder, pivot_encoder,pivot_decoder,greedy_generator):
+        super().__init__()
+
+        self.encoder = encoder
+        self.decoder = decoder
+        self.pivot_encoder = pivot_encoder
+        self.pivot_decoder = pivot_decoder
+        self.greedy_generator = greedy_generator
+        assert isinstance(self.encoder, FairseqEncoder)
+        assert isinstance(self.decoder, FairseqDecoder)
+        assert isinstance(self.pivot_encoder, FairseqEncoder)
+        assert isinstance(self.pivot_decoder, FairseqDecoder)
+
+    def forward(self, src_tokens, src_lengths, prev_output_tokens):
+        """
+        Run the forward pass for an encoder-decoder model.
+
+        First feed a batch of source tokens through the encoder. Then, feed the
+        encoder output and previous decoder outputs (i.e., input feeding/teacher
+        forcing) to the decoder to produce the next outputs::
+
+            encoder_out = self.encoder(src_tokens, src_lengths)
+            return self.decoder(prev_output_tokens, encoder_out)
+
+        Args:
+            src_tokens (LongTensor): tokens in the source language of shape
+                `(batch, src_len)`
+            src_lengths (LongTensor): source sentence lengths of shape `(batch)`
+            prev_output_tokens (LongTensor): previous decoder outputs of shape
+                `(batch, tgt_len)`, for input feeding/teacher forcing
+
+        Returns:
+            the decoder's output, typically of shape `(batch, tgt_len, vocab)`
+        """
+        encoder_out = self.encoder(src_tokens, src_lengths)
+
+        #Greedy decode pivot language
+        pivot_decoder_out = self.greedy_decode(src_tokens,src_lengths,encoder_out,None)
+        pivot_decoder_lengths = torch.LongTensor([len(pivot_decoder_out)])
+        pivot_encoder_out = self.greedy_encode(pivot_decoder_out,pivot_decoder_lengths)
+        decoder_out = self.decoder(prev_output_tokens, pivot_encoder_out)
+        return decoder_out
+
+    def max_positions(self):
+        """Maximum length supported by the model."""
+        return (self.encoder.max_positions(), self.decoder.max_positions())
+
+
+    def greedy_encode(self,src_tokens,src_lengths):
+        encoder_input = {
+            'src_tokens':src_tokens,
+            'src_lengths':src_lengths
+        }
+        return  self.greedy_generator.greedy_encode(self.pivot_encoder,encoder_input)
+
+    def greedy_decode(self,src_tokens,src_lengths, encoder_out,prev_tokens,lang):
+        encoder_input = {
+            'src_tokens':src_tokens,
+            'src_lengths':src_lengths
+        }
+        return  self.greedy_generator.greedy_decode(self.encoder,encoder_input,encoder_out,prev_tokens)
+
+
+
 class FairseqMultiModel(BaseFairseqModel):
     """Base class for combining multiple encoder-decoder models."""
     def __init__(self, encoders, decoders):
@@ -295,11 +370,7 @@ class FairseqInterlinguaModel(BaseFairseqModel):
             key: FairseqModel(encoders[key.split('-')[0]], decoders[key.split('-')[1]])
             for key in self.keys
         })
-        '''
-        self.devices = OrderedDict()
-        for i,k in enumerate(sorted(encoders.keys())):
-            self.devices[k] = 'cuda:' + str(i) if torch.cuda.device_count() > 1 else 'gpu:0'
-        '''
+
 
     def forward(self, src_tokens, src_lengths, prev_output_tokens):
         '''
@@ -317,6 +388,74 @@ class FairseqInterlinguaModel(BaseFairseqModel):
                 encoder_outs[pair] = self.models[pair].encoder(src_tokens,src_lengths)
                 decoder_outs[pair] = self.models[pair].decoder(prev_output_tokens,encoder_outs[pair])
         return decoder_outs
+
+
+    def max_positions(self):
+        """Maximum length supported by the model."""
+        return {
+            key: (self.models[key].encoder.max_positions(), self.models[key].decoder.max_positions())
+            for key in self.keys
+        }
+
+    def max_decoder_positions(self):
+        """Maximum length supported by the decoder."""
+        return min(model.decoder.max_positions() for model in self.models.values())
+
+    @property
+    def encoder(self):
+        return self.models[self.keys[0]].encoder
+
+    @property
+    def decoder(self):
+        return self.models[self.keys[0]].decoder
+
+
+class FairseqUnsupervisedInterlinguaModel(BaseFairseqModel):
+    """Base class for combining multiple encoder-decoder models."""
+    def __init__(self, encoders, decoders,pivot_encoders, pivot_decoders, pivot_dicts):
+        super().__init__()
+        #assert encoders.keys() == decoders.keys()
+
+        self.keys =  [key1+'-'+key2 for key1 in encoders.keys() for key2 in decoders.keys() if key1 != key2]
+        self.pivot_keys = [key1+'-'+key2 for key1 in encoders.keys() for key2 in decoders.keys() if key1 != key2]
+
+        for key in self.keys + self.pivot_keys:
+            pair = key.split('-')
+            assert isinstance(encoders[pair[0]], FairseqEncoder)
+            assert isinstance(decoders[pair[1]], FairseqDecoder)
+
+        self.models = nn.ModuleDict({
+            key: FairseqModel(encoders[key.split('-')[0]], decoders[key.split('-')[1]])
+            for key in self.keys
+        })
+
+
+        self.pivot_models = nn.ModuleDict({
+            key: FairseqModel(encoders[key.split('-')[0]], decoders[key.split('-')[1]])
+            for key in self.pivot_keys
+        })
+
+        self.greedy_generators = {lang:GreedyGenerator(self.pivot_models[lang],pivot_dicts[lang]) for lang in self.pivot_keys}
+
+    def forward(self, src_tokens, src_lengths, prev_output_tokens):
+        '''
+        decoder_outs = {}
+        for key in self.keys:
+            encoder_out = self.models[key].encoder(src_tokens, src_lengths)
+            decoder_outs[key] = self.models[key].decoder(prev_output_tokens, encoder_out)
+        return decoder_outs
+        '''
+        decoder_outs = {}
+        encoder_outs = {}
+        for i,key1 in enumerate(self.keys):
+            for key2 in self.keys:
+                pair = key1 + '-' + key2
+                encoder_outs[pair] = self.models[pair].encoder(src_tokens,src_lengths)
+                decoder_outs[pair] = self.models[pair].decoder(prev_output_tokens,encoder_outs[pair])
+        return decoder_outs
+
+
+
 
 
     def max_positions(self):

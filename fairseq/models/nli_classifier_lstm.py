@@ -111,46 +111,15 @@ class NliClassifierLSTMModel(BaseFairseqModel):
         #def get_or_build_embedding(lang_embs,dictionary,embed_dim, path=None):
 
 
-        def build_embedding(dictionary, embed_dim, path=None):
-            num_embeddings = len(dictionary)
-            padding_idx = dictionary.pad()
-            emb = Embedding(num_embeddings, embed_dim, padding_idx)
-            # if provided, load from preloaded dictionaries
-            if path:
-                embed_dict = utils.parse_embedding(path)
-                utils.load_embedding(embed_dict, dictionary, emb)
-            return emb
 
-        if args.share_all_embeddings:
-            if ref_dict != hyp_dict:
-                raise ValueError('--share-all-embeddings requires a joined dictionary')
-            if args.encoder_embed_dim != args.decoder_embed_dim:
-                raise ValueError(
-                    '--share-all-embeddings requires --encoder-embed-dim to match --decoder-embed-dim')
-            if args.decoder_embed_path and (
-                    args.decoder_embed_path != args.encoder_embed_path):
-                raise ValueError('--share-all-embeddings not compatible with --decoder-embed-path')
-            encoder_embed_tokens = build_embedding(
-                ref_dict, args.encoder_embed_dim, args.encoder_embed_path
-            )
-            decoder_embed_tokens = encoder_embed_tokens
-            args.share_decoder_input_output_embed = True
-        else:
-            encoder_embed_tokens = build_embedding(
-                ref_dict, args.encoder_embed_dim, args.encoder_embed_path
-            )
-            decoder_embed_tokens = build_embedding(
-                hyp_dict, args.decoder_embed_dim, args.decoder_embed_path
-            )
-
-        encoder = LSTMEncoder(args, ref_dict, encoder_embed_tokens)
+        encoder = LSTMEncoder(ref_dict, args.encoder_embed_dim, args.encoder_embed_dim,args.encoder_layers)
         classifier = nn.ModuleList([
             torch.nn.Dropout(args.class_dropout),
             torch.nn.Linear(args.encoder_embed_dim*4,args.class_hidden_size),
             torch.nn.Linear(args.class_hidden_size,3),
             torch.nn.Softmax()
         ])
-        return NliClassifierModel(encoder, classifier)
+        return NliClassifierLSTMModel(encoder, classifier)
 
     def forward(self, reference,ref_lengths,hypothesis,hyp_lengths,labels):
         encoder_ref_out = self.encoder(reference,ref_lengths)['encoder_out'][1]
@@ -180,6 +149,11 @@ class NliClassifierLSTMModel(BaseFairseqModel):
 
 
 
+def Embedding(num_embeddings, embedding_dim, padding_idx):
+    m = nn.Embedding(num_embeddings, embedding_dim, padding_idx=padding_idx)
+    nn.init.normal_(m.weight, mean=0, std=embedding_dim ** -0.5)
+    nn.init.constant_(m.weight[padding_idx], 0)
+    return m
 
 
 
