@@ -154,9 +154,11 @@ class NliClassifierModel(BaseFairseqModel):
         encoder_ref_out = self.encoder(reference,ref_lengths)['encoder_out']
         encoder_hyp_out = self.encoder(hypothesis,hyp_lengths)['encoder_out']
 
-        encoder_ref_out = encoder_ref_out.permute(1,0,2).mean(1)
-        encoder_hyp_out = encoder_hyp_out.permute(1,0,2).mean(1)
+        #encoder_ref_out = encoder_ref_out.permute(1,0,2).mean(1)
+        #encoder_hyp_out = encoder_hyp_out.permute(1,0,2).mean(1)
 
+        encoder_ref_out = torch.max(encoder_ref_out.permute(1,0,2),1).values
+        encoder_hyp_out = torch.max(encoder_hyp_out.permute(1,0,2),1).values
 
 
         #CHECK IF THE RESULT IS TRANSPOSED
