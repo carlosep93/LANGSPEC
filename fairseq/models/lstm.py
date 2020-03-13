@@ -53,7 +53,7 @@ class LSTMModel(FairseqModel):
                             help='comma separated list of adaptive softmax cutoff points. '
                                  'Must be used with adaptive_loss criterion')
 
-        # Granular dropout settings (if not specified these default to --dropout)
+
         parser.add_argument('--encoder-dropout-in', type=float, metavar='D',
                             help='dropout probability for encoder input embedding')
         parser.add_argument('--encoder-dropout-out', type=float, metavar='D',

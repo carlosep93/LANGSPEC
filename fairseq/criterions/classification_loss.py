@@ -7,7 +7,7 @@
 
 import math
 import torch.nn.functional as F
-
+import torch
 from fairseq import utils
 
 from . import FairseqCriterion, register_criterion
@@ -18,6 +18,7 @@ class ClassificationLossCriterion(FairseqCriterion):
 
     def __init__(self, args, task):
         super().__init__(args, task)
+        self.criterion = torch.nn.CrossEntropyLoss()
 
     def forward(self, model, sample, reduce=True):
         """Compute the loss for the given sample.
@@ -29,7 +30,7 @@ class ClassificationLossCriterion(FairseqCriterion):
         """
         net_output = model(**sample['net_input'])
         targets = model.get_targets(sample,net_output)
-        loss = F.binary_cross_entropy(net_output, targets, size_average=False,reduce=reduce)
+        loss = self.criterion(net_output, targets.flatten())
         sample_size = sample['target'].size(0) if self.args.sentence_avg else sample['ntokens']
         logging_output = {
             'loss': utils.item(loss.data) if reduce else loss.data,

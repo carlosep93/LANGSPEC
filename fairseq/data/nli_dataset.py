@@ -46,7 +46,8 @@ def collate(
         ntokens = sum(len(s['reference']) for s in samples)
 
     if samples[0].get('label',None) is not None:
-        labels = merge('label',left_pad=False)
+        #labels = merge('label',left_pad=False)
+        labels = torch.LongTensor([s['label'] for s in samples])
         labels = labels.index_select(0,sort_order)
 
     batch = {
@@ -68,9 +69,9 @@ def load_labels(path,labels_dict):
     with open(path) as p:
         for l in p.readlines():
             l = l.replace('\n','')
-            label = [0.0,0.0,0.0]
-            label[labels_dict[l]] = 1.0
-            labels.append(label)
+            #label = [0.0,0.0,0.0]
+            #label[labels_dict[l]] = 1.0
+            labels.append(labels_dict[l])
     return torch.Tensor(labels)
 
 
@@ -211,7 +212,7 @@ class NliDataset(FairseqDataset):
                 'ref_lengths': torch.Tensor([ref_len]),
                 'hypothesis': self.hyp_dict.dummy_sentence(hyp_len) if self.hyp_dict is not None else None,
                 'hyp_lengths': torch.Tensor([hyp_len]),
-                'label': torch.Tensor([1.0,0.0,0.0])
+                'label': torch.LongTensor([1])
             }
             for i in range(bsz)
         ])
