@@ -39,8 +39,8 @@ class InterlinguaTransformerModel(FairseqInterlinguaModel):
         --share-decoders: share all decoder params (incl. embeddings) across all target languages
     """
 
-    def __init__(self, encoders, decoders,auto=True):
-        super().__init__(encoders, decoders,auto)
+    def __init__(self, encoders, decoders,keys,auto=True):
+        super().__init__(encoders, decoders,keys,auto)
 
     @staticmethod
     def add_args(parser):
@@ -192,7 +192,7 @@ class InterlinguaTransformerModel(FairseqInterlinguaModel):
             lang_decoders[lang_pair[1]] = try_decoder(args,tgt,src)
 
         auto = task.auto if hasattr(task,'auto') else False
-        return InterlinguaTransformerModel(lang_encoders, lang_decoders,auto)
+        return InterlinguaTransformerModel(lang_encoders, lang_decoders,args.lang_pairs,auto)
 
 
 
