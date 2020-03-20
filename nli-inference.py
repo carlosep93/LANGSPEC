@@ -16,7 +16,8 @@ from fairseq.meters import StopwatchMeter, TimeMeter
 from fairseq.sequence_generator import SequenceGenerator
 import torch.nn as nn
 from fairseq.sequence_scorer import SequenceScorer
-
+import numpy as np
+from scipy.special import softmax
 
 def main(args):
     assert args.path is not None, '--path required for generation!'
@@ -72,13 +73,16 @@ def main(args):
                 net_input = sample['net_input']
                 if use_cuda:
                     net_input = {k:v.cuda() for k,v in net_input.items()}
-                preds.append(model(**net_input)[0].tolist())
-                labels.append(net_input['labels'][0].tolist())
+                net_output = model(**net_input)
+                probs =  softmax(net_output.cpu().tolist()).tolist()
+                preds = preds + probs if preds != [] else probs
+                labels = labels + net_input['labels'].tolist()
 
 
     #Compute accuracy
-    preds = [p.index(max(p)) for p in preds]
-    labels = [l.index(max(l)) for l in labels]
+    #preds = [p.index(max(p)) for p in preds]
+    preds = [np.argmax(p) for p in preds]
+    #labels = [l.index(max(l)) for l in labels]
     r = [1.0 if p == l else 0 for p,l in zip(preds,labels)]
     acc = sum(r)/len(r)
     print('Accuracy', acc)

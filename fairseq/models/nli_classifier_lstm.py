@@ -113,11 +113,9 @@ class NliClassifierLSTMModel(BaseFairseqModel):
 
 
         encoder = LSTMEncoder(ref_dict, args.encoder_embed_dim, args.encoder_embed_dim,args.encoder_layers)
-        classifier = nn.ModuleList([
+        classifier = nn.Sequential(*[
             torch.nn.Dropout(args.class_dropout),
-            torch.nn.Linear(args.encoder_embed_dim*4,args.class_hidden_size),
-            torch.nn.Linear(args.class_hidden_size,3),
-            #torch.nn.Softmax()
+            torch.nn.Linear(args.encoder_embed_dim*4,3),
         ])
         return NliClassifierLSTMModel(encoder, classifier)
 
@@ -126,26 +124,30 @@ class NliClassifierLSTMModel(BaseFairseqModel):
         # Sort the input and lengths as the descending order
         with torch.no_grad():
             self.encoder.eval()
+
             ref_lengths, ref_perm_index = ref_lengths.sort(0, descending=True)
             reference = reference[ref_perm_index]
         
             hyp_lengths, hyp_perm_index = hyp_lengths.sort(0, descending=True)
             hypothesis = hypothesis[hyp_perm_index]
 
-            encoder_ref_out,_,_ = self.encoder(reference,ref_lengths)['encoder_out'][:3]
-            encoder_hyp_out,_,_ = self.encoder(hypothesis,hyp_lengths)['encoder_out'][:3]
+            encoder_ref_out = self.encoder(reference,ref_lengths)
+            encoder_hyp_out = self.encoder(hypothesis,hyp_lengths)
 
- 
-            #encoder_ref_out = torch.max(encoder_ref_out.permute(1,0,2),1).values
-            #encoder_hyp_out = torch.max(encoder_hyp_out.permute(1,0,2),1).values
+            #restore sorting
+            encoder_ref_out = self.encoder.reorder_encoder_out(encoder_ref_out,ref_perm_index)
+            encoder_hyp_out =  self.encoder.reorder_encoder_out(encoder_hyp_out,hyp_perm_index)
+
+            encoder_ref_out,_,_ = encoder_ref_out['encoder_out']
+            encoder_hyp_out,_,_ = encoder_hyp_out['encoder_out']
+
+            encoder_ref_out = torch.max(encoder_ref_out.transpose(0,1),1).values
+            encoder_hyp_out = torch.max(encoder_hyp_out.transpose(0,1),1).values
 
             #Select just the last step of the LSTM encoding
-            encoder_ref_out = encoder_ref_out.permute(1,0,2)[:,-1,:]
-            encoder_hyp_out = encoder_hyp_out.permute(1,0,2)[:,-1,:]
+            #encoder_ref_out = encoder_ref_out.permute(1,0,2)[:,-1,:]
+            #encoder_hyp_out = encoder_hyp_out.permute(1,0,2)[:,-1,:]
 
-        #restore sorting
-        encoder_ref_out = encoder_ref_out[ref_perm_index]
-        encoder_hyp_out =  encoder_hyp_out[ref_perm_index]
 
 
         #CHECK IF THE RESULT IS TRANSPOSED
@@ -154,9 +156,7 @@ class NliClassifierLSTMModel(BaseFairseqModel):
         out = torch.cat((encoder_ref_out,encoder_hyp_out),1)
         out = torch.cat((out,abs_dif),1)
         out = torch.cat((out,elem_wise_mul),1)
-        
-        for layer in self.classifier:
-            out = layer(out)
+        out = self.classifier(out)
 
         return out
 
