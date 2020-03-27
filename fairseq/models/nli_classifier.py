@@ -32,8 +32,9 @@ class NliClassifierModel(BaseFairseqModel):
     <https://arxiv.org/abs/1809.05053>
     """
 
-    def __init__(self, encoder, classifier):
+    def __init__(self,embeddings, encoder, classifier):
         super().__init__()
+        self.embeddings = embeddings
         self.encoder = encoder
         self.classifier = classifier
 
@@ -131,34 +132,55 @@ class NliClassifierModel(BaseFairseqModel):
             encoder_embed_tokens = build_embedding(
                 ref_dict, args.encoder_embed_dim, args.encoder_embed_path
             )
-            decoder_embed_tokens = encoder_embed_tokens
             args.share_decoder_input_output_embed = True
         else:
             encoder_embed_tokens = build_embedding(
                 ref_dict, args.encoder_embed_dim, args.encoder_embed_path
             )
-            decoder_embed_tokens = build_embedding(
-                hyp_dict, args.decoder_embed_dim, args.decoder_embed_path
-            )
+
 
         encoder = TransformerEncoder(args, ref_dict, encoder_embed_tokens)
-        classifier = nn.ModuleList([
+        classifier = nn.Sequential(*[
             torch.nn.Dropout(args.class_dropout),
             torch.nn.Linear(args.encoder_embed_dim*4,args.class_hidden_size),
             torch.nn.Linear(args.class_hidden_size,3),
-            torch.nn.Softmax()
+            torch.nn.LogSoftmax()
         ])
-        return NliClassifierModel(encoder, classifier)
+        return NliClassifierModel(encoder_embed_tokens,encoder, classifier)
 
     def forward(self, reference,ref_lengths,hypothesis,hyp_lengths,labels):
-        encoder_ref_out = self.encoder(reference,ref_lengths)['encoder_out']
-        encoder_hyp_out = self.encoder(hypothesis,hyp_lengths)['encoder_out']
+        self.encoder.eval()
+        self.embeddings.eval()
+        with torch.no_grad():
 
-        #encoder_ref_out = encoder_ref_out.permute(1,0,2).mean(1)
-        #encoder_hyp_out = encoder_hyp_out.permute(1,0,2).mean(1)
 
-        encoder_ref_out = torch.max(encoder_ref_out.permute(1,0,2),1).values
-        encoder_hyp_out = torch.max(encoder_hyp_out.permute(1,0,2),1).values
+            encoder_ref_out = self.encoder(reference,ref_lengths)
+            encoder_hyp_out = self.encoder(hypothesis,hyp_lengths)
+
+            encoder_ref_padding_mask = encoder_ref_out['encoder_padding_mask']
+            encoder_hyp_padding_mask = encoder_hyp_out['encoder_padding_mask']
+
+            encoder_ref_out = encoder_ref_out['encoder_out']
+            encoder_hyp_out = encoder_hyp_out['encoder_out']
+
+            #apply masking
+            if not encoder_ref_padding_mask is None:
+                encoder_ref_padding_mask = encoder_ref_padding_mask.t().unsqueeze(-1).repeat(1,1,encoder_ref_out.shape[-1])
+                encoder_ref_out = encoder_ref_out.float().masked_fill(
+                        encoder_ref_padding_mask,
+                        float('-inf'),
+                    ).type_as(encoder_ref_out)
+
+            if not encoder_hyp_padding_mask is None:
+                encoder_hyp_padding_mask = encoder_hyp_padding_mask.t().unsqueeze(-1).repeat(1,1,encoder_hyp_out.shape[-1])
+                encoder_hyp_out = encoder_hyp_out.float().masked_fill(
+                        encoder_hyp_padding_mask,
+                        float('-inf'),
+                    ).type_as(encoder_hyp_out)
+
+
+            encoder_ref_out = torch.max(encoder_ref_out.permute(1,0,2),1).values
+            encoder_hyp_out = torch.max(encoder_hyp_out.permute(1,0,2),1).values
 
 
         #CHECK IF THE RESULT IS TRANSPOSED
@@ -167,8 +189,7 @@ class NliClassifierModel(BaseFairseqModel):
         out = torch.cat((encoder_ref_out,encoder_hyp_out),1)
         out = torch.cat((out,abs_dif),1)
         out = torch.cat((out,elem_wise_mul),1)
-        for layer in self.classifier:
-            out = layer(out)
+        out = self.classifier(out)
 
         return out
 

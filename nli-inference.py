@@ -41,8 +41,8 @@ def main(args):
 
     # Load ensemble
     print('| loading model(s) from {}'.format(args.path))
-    model = utils.load_nli_model_for_inference(args.path, task, model_arg_overrides=args.model_overrides)
-
+    model,_ = utils.load_ensemble_for_inference([args.path], task, model_arg_overrides=eval(args.model_overrides))
+    model = model[0]
 
 
     # Load dataset (possibly sharded)
@@ -74,13 +74,12 @@ def main(args):
                 if use_cuda:
                     net_input = {k:v.cuda() for k,v in net_input.items()}
                 net_output = model(**net_input)
-                probs =  softmax(net_output.cpu().tolist()).tolist()
-                preds = preds + probs if preds != [] else probs
+                #probs =  softmax(net_output.cpu().tolist()).tolist()
+                probs = net_output.cpu().tolist()
+                preds = preds + probs
                 labels = labels + net_input['labels'].tolist()
 
-
     #Compute accuracy
-    #preds = [p.index(max(p)) for p in preds]
     preds = [np.argmax(p) for p in preds]
     #labels = [l.index(max(l)) for l in labels]
     r = [1.0 if p == l else 0 for p,l in zip(preds,labels)]

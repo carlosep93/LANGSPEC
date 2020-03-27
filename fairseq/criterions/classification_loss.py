@@ -18,7 +18,7 @@ class ClassificationLossCriterion(FairseqCriterion):
 
     def __init__(self, args, task):
         super().__init__(args, task)
-
+        self.criterion = torch.nn.NLLLoss()
     def forward(self, model, sample, reduce=True):
         """Compute the loss for the given sample.
 
@@ -29,7 +29,8 @@ class ClassificationLossCriterion(FairseqCriterion):
         """
         net_output = model(**sample['net_input'])
         targets = model.get_targets(sample,net_output)
-        loss = F.cross_entropy(net_output, targets.flatten())
+        #targets = targets.flatten()
+        loss = self.criterion(net_output,targets)
         sample_size = sample['target'].size(0) if self.args.sentence_avg else sample['ntokens']
         logging_output = {
             'loss': utils.item(loss.data) if reduce else loss.data,

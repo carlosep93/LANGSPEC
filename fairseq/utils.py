@@ -266,14 +266,13 @@ def load_nli_model_for_inference(path,task, model_arg_overrides=None,pair=None):
 
     #load encoder state from previous model
     enc_state = torch.load(task.enc_path, map_location=lambda s, l: default_restore_location(s, 'cpu'))
-    '''
+
     if not task.enc_key is None:
         enc_state['model'] = OrderedDict({k:v for k,v in enc_state['model'].items() if '.'.join(['models',task.enc_key,'encoder']) in k})
         enc_state['model'] = OrderedDict({k.replace('models.' + task.enc_key + '.',''):v for k,v in enc_state['model'].items()})
     else:
-        enc_state['model'] = OrderedDict({k:v for k,v in enc_state['model'].items() if 'encoder.' in k})
-    '''
-    enc_state['model'] = OrderedDict({k:v for k,v in enc_state['model'].items() if 'encoder.' in k})
+        enc_state['model'] = OrderedDict({k:v for k,v in enc_state['model'].items() if 'encoder' in k})
+
     #Load classifier weights
     state = torch.load(path, map_location=lambda s, l: default_restore_location(s, 'cpu'))
     state['model'] = OrderedDict({k:v for k,v in state['model'].items() if 'classifier' in k})
@@ -285,8 +284,8 @@ def load_nli_model_for_inference(path,task, model_arg_overrides=None,pair=None):
     args = state['args']
 
     model = task.build_model(args)
-    model.upgrade_state_dict(state)
-    model.load_state_dict(state, strict=False)
+    model.upgrade_state_dict(state['model'])
+    model.load_state_dict(state['model'], strict=False)
 
 
     model.eval()
@@ -322,8 +321,8 @@ def load_ensemble_for_inference(filenames, task, model_arg_overrides=None,pair=N
 
         # build model for ensemble
         model = task.build_model(args)
-        model.upgrade_state_dict(state['model'])
-        model.load_state_dict(state['model'], strict=False)
+        #model.upgrade_state_dict(state['model'])
+        model.load_state_dict(state['model'], strict=True)
         ensemble.append(model)
 
         # some args (e.g., tokens_per_sample) might have been updated while building the model
