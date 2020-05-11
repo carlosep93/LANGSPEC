@@ -258,7 +258,18 @@ def validate(args, trainer, task, epoch_itr, subsets):
             stats[k] = meter.avg
         progress.print(stats)
 
-        valid_losses.append(stats['valid_loss'])
+    valid_losses.append(stats['valid_loss'])
+
+    if hasattr(task,'adapt') and  task.adapt == True:
+        pairs,schedule = task.adapt_schedule(stats,len(task.dicts))
+        print('***************')
+        print('* NEW TRAINING SCHEDULE')
+        print('* lang pairs:', pairs)
+        print('* schedule:', schedule)
+        print('***************')
+        task.args.lang_pairs = pairs
+        task.args.freeze_schedule = schedule
+
     return valid_losses
 
 
