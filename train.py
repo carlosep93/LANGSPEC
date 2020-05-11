@@ -35,7 +35,7 @@ def main(args):
     task = tasks.setup_task(args)
 
     # Load dataset splits
-    load_dataset_splits(task, ['train', 'valid'])
+    load_dataset_splits(task, ['train', args.valid_subset])
 
     # Build model and criterion
     model = task.build_model(args)
