@@ -35,7 +35,7 @@ def main(args):
     task = tasks.setup_task(args)
 
     # Load dataset splits
-    load_dataset_splits(task, ['train', 'valid'])
+    load_dataset_splits(task, ['train', args.valid_subset])
 
     # Build model and criterion
     model = task.build_model(args)
@@ -258,7 +258,18 @@ def validate(args, trainer, task, epoch_itr, subsets):
             stats[k] = meter.avg
         progress.print(stats)
 
-        valid_losses.append(stats['valid_loss'])
+    valid_losses.append(stats['valid_loss'])
+
+    if hasattr(task,'adapt') and  task.adapt == True:
+        pairs,schedule = task.adapt_schedule(stats,len(task.dicts))
+        print('***************')
+        print('* NEW TRAINING SCHEDULE')
+        print('* lang pairs:', pairs)
+        print('* schedule:', schedule)
+        print('***************')
+        task.args.lang_pairs = pairs
+        task.args.freeze_schedule = schedule
+
     return valid_losses
 
 

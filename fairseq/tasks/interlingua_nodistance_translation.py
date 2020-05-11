@@ -78,6 +78,8 @@ class InterlinguaNoDistanceTranslationTask(FairseqTask):
         self.training = training
         self.num_updates = 0
         self.auto = args.auto_encoding == 'True'
+        self.adapt = args.adapt_schedule
+        pass
 
     @classmethod
     def setup_task(cls, args, **kwargs):
@@ -249,7 +251,7 @@ class InterlinguaNoDistanceTranslationTask(FairseqTask):
             rev_lp =  '-'.join(lp.split('-')[::-1])
             print(lp,rev_lp)
             if not lp in lang_pairs and not rev_lp in lang_pairs:
-                lang_pairs[lp] = (logging[lp]['loss'] + logging[rev_lp]['loss']) / 2.0
+                lang_pairs[lp] = (logging[lp + ':loss'] + logging[rev_lp + ':loss']) / 2.0
 
         # Select pair that will not be frozen the following epoch
         # criterion: Maximum loss pair that does not overlap with previously
@@ -303,15 +305,7 @@ class InterlinguaNoDistanceTranslationTask(FairseqTask):
                 # TODO make summing of the sample sizes configurable
                 agg_sample_size += sample_size
                 agg_logging_output[lang_pair] = logging_output
-        if self.args.adapt_schedule:
-           pairs,schedule = self.adapt_schedule(agg_logging_output,len(self.dicts))
-           print('***************')
-           print('* NEW TRAINING SCHEDULE')
-           print('* lang pairs:', pairs)
-           print('* schedule:', schedule)
-           print('***************')
-           self.args.lang_pairs = pairs
-           self.args.freeze_schedule = schedule
+
 
         return agg_loss, agg_sample_size, agg_logging_output
 
