@@ -44,6 +44,14 @@ def main(args):
     model,_ = utils.load_ensemble_for_inference([args.path], task, model_arg_overrides=eval(args.model_overrides))
     model = model[0]
 
+    model.make_generation_fast_(
+            beamable_mm_beam_size=none if args.no_beamable_mm else args.beam,
+            need_attn=args.print_alignment,
+        )
+    if args.fp16:
+        model.half()
+
+
 
     # Load dataset (possibly sharded)
     itr = task.get_batch_iterator(
@@ -77,7 +85,7 @@ def main(args):
                 #probs =  softmax(net_output.cpu().tolist()).tolist()
                 probs = net_output.cpu().tolist()
                 preds = preds + probs
-                labels = labels + net_input['labels'].tolist()
+                labels = labels + net_input['labels'].cpu().tolist()
 
     #Compute accuracy
     preds = [np.argmax(p) for p in preds]
