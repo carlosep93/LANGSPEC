@@ -9,10 +9,11 @@ from collections import OrderedDict
 
 from fairseq import utils
 from fairseq.tasks.multilingual_translation import MultilingualTranslationTask
+from fairseq.tasks.unsupervised_multilingual_translation import UnsupervisedMultilingualTranslationTask
 from fairseq.tasks.interlingua_nodistance_translation import InterlinguaNoDistanceTranslationTask
 
-from . import FairseqMultiModel, register_model, register_model_architecture
-
+from . import register_model, register_model_architecture
+from fairseq.models.fairseq_model import FairseqMultiUnsupModel
 from .transformer import (
     base_architecture,
     Embedding,
@@ -23,7 +24,7 @@ from .transformer import (
 
 
 @register_model('unsupervised_multilingual_transformer')
-class UnsupervisedMultilingualTransformerModel(FairseqMultiModel):
+class UnsupervisedMultilingualTransformerModel(FairseqMultiUnsupModel):
     """Train Transformer models for multiple language pairs simultaneously.
 
     Requires `--task multilingual_translation`.
@@ -39,8 +40,8 @@ class UnsupervisedMultilingualTransformerModel(FairseqMultiModel):
         --share-decoders: share all decoder params (incl. embeddings) across all target languages
     """
 
-    def __init__(self, encoders, decoders):
-        super().__init__(encoders, decoders)
+    def __init__(self, encoders, decoders, pivot_encoders, pivot_decoders, pivot_dicts):
+        super().__init__(encoders, decoders,pivot_encoders, pivot_decoders, pivot_dicts)
 
     @staticmethod
     def add_args(parser):
@@ -58,7 +59,7 @@ class UnsupervisedMultilingualTransformerModel(FairseqMultiModel):
     @classmethod
     def build_model(cls, args, task):
         """Build a new model instance."""
-        assert isinstance(task, MultilingualTranslationTask) or isinstance(task,InterlinguaNoDistanceTranslationTask)
+        assert isinstance(task, MultilingualTranslationTask) or isinstance(task,UnsupervisedMultilingualTranslationTask)
 
         # make sure all arguments are present in older models
         base_multilingual_architecture(args)
@@ -69,7 +70,9 @@ class UnsupervisedMultilingualTransformerModel(FairseqMultiModel):
             args.max_target_positions = 1024
 
         src_langs = [lang_pair.split('-')[0] for lang_pair in args.lang_pairs]
-        tgt_langs = [lang_pair.split('-')[1] for lang_pair in args.lang_pairs]
+        tgt_langs = src_langs
+        pivot_src_langs = [lang_pair.split('-')[1] for lang_pair in args.lang_pairs]
+        pivot_tgt_langs = pivot_src_langs
 
         if args.share_encoders:
             args.share_encoder_embeddings = True
@@ -122,26 +125,26 @@ class UnsupervisedMultilingualTransformerModel(FairseqMultiModel):
         # encoders/decoders for each language
         lang_encoders, lang_decoders = {}, {}
 
-        def get_encoder(lang):
+        def get_encoder(lang,dict):
             if lang not in lang_encoders:
                 if shared_encoder_embed_tokens is not None:
                     encoder_embed_tokens = shared_encoder_embed_tokens
                 else:
                     encoder_embed_tokens = build_embedding(
-                        task.dicts[lang], args.encoder_embed_dim, args.encoder_embed_path
+                        dict, args.encoder_embed_dim, args.encoder_embed_path
                     )
-                lang_encoders[lang] = TransformerEncoder(args, task.dicts[lang], encoder_embed_tokens)
+                lang_encoders[lang] = TransformerEncoder(args, dict, encoder_embed_tokens)
             return lang_encoders[lang]
 
-        def get_decoder(lang):
+        def get_decoder(lang,dict):
             if lang not in lang_decoders:
                 if shared_decoder_embed_tokens is not None:
                     decoder_embed_tokens = shared_decoder_embed_tokens
                 else:
                     decoder_embed_tokens = build_embedding(
-                        task.dicts[lang], args.decoder_embed_dim, args.decoder_embed_path
+                        dict, args.decoder_embed_dim, args.decoder_embed_path
                     )
-                lang_decoders[lang] = TransformerDecoder(args, task.dicts[lang], decoder_embed_tokens)
+                lang_decoders[lang] = TransformerDecoder(args, dict, decoder_embed_tokens)
             return lang_decoders[lang]
 
         # shared encoders/decoders (if applicable)
@@ -153,10 +156,23 @@ class UnsupervisedMultilingualTransformerModel(FairseqMultiModel):
 
         encoders, decoders = OrderedDict(), OrderedDict()
         for lang_pair, src, tgt in zip(args.lang_pairs, src_langs, tgt_langs):
-            encoders[lang_pair] = shared_encoder if shared_encoder is not None else get_encoder(src)
-            decoders[lang_pair] = shared_decoder if shared_decoder is not None else get_decoder(tgt)
+            lang = lang_pair.split('-')[0]
+            encoders[lang] = shared_encoder if shared_encoder is not None else get_encoder(src,task.dicts[lang])
+            decoders[lang] = shared_decoder if shared_decoder is not None else get_decoder(tgt,task.dicts[lang])
 
-        return UnsupervisedMultilingualTransformerModel(encoders, decoders)
+        #load pivot languages encoders and decoders
+        pivot_encoders, pivot_decoders = OrderedDict(), OrderedDict()
+        for lang_pair, src, tgt in zip(args.lang_pairs, pivot_src_langs, pivot_tgt_langs):
+            lang = lang_pair.split('-')[1]
+            pivot_encoders[lang] = shared_encoder if shared_encoder is not None else get_encoder(src,task.pivot_dicts[lang])
+            pivot_decoders[lang] = shared_decoder if shared_decoder is not None else get_decoder(tgt,task.pivot_dicts[lang])
+
+
+        return UnsupervisedMultilingualTransformerModel(encoders,
+                                                        decoders,
+                                                        pivot_encoders,
+                                                        pivot_decoders,
+                                                        task.pivot_dicts)
 
 
 @register_model_architecture('unsupervised_multilingual_transformer', 'unsupervised_multilingual_transformer')

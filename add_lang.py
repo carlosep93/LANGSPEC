@@ -331,12 +331,12 @@ def load_checkpoint(args, trainer, epoch_itr):
     return False
 
 
-def load_previous_model(args, trainer):
+def load_pivot_model(args, trainer):
     """Load a checkpoint and replay dataloader to match."""
     os.makedirs(args.save_dir, exist_ok=True)
     checkpoint_path = os.path.join(args.prev_model, args.restore_file)
     if os.path.isfile(checkpoint_path):
-        trainer.load_partial_checkpoint(checkpoint_path,args.key, args.newkey, args.reuse, args.reset_optimizer, args.reset_lr_scheduler,
+        trainer.load_pivot_checkpoint(checkpoint_path,args.key, args.newkey, args.reuse, args.reset_optimizer, args.reset_lr_scheduler,
                                               eval(args.optimizer_overrides))
         return True
     return False

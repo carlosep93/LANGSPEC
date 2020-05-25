@@ -60,13 +60,13 @@ class GreedyGenerator(object):
             decoder.cuda()
         return self
 
-    def greedy_encode(self,encoder,encoder_input):
+    def encode(self,encoder,src_tokens,srclen, bsz):
         with torch.no_grad():
-            src_tokens = encoder_input['src_tokens']
-            bsz, srclen = src_tokens.size()
+            #src_tokens = encoder_input['src_tokens']
+            #bsz, srclen = src_tokens.size()
 
             # compute the encoder output for each beam
-            encoder_out = encoder(**encoder_input)
+            encoder_out = encoder(src_tokens,srclen)
             new_order = torch.arange(bsz).view(-1, 1).repeat(1, 1).view(-1)
             new_order = new_order.to(src_tokens.device)
             encoder_out = encoder.reorder_encoder_out(encoder_out, new_order)
@@ -86,7 +86,7 @@ class GreedyGenerator(object):
         with torch.no_grad():
             return self._greedy_decode(encoder,encoder_out, src_tokens, bsz, beam_size, maxlen, prefix_tokens)
 
-    def _greedy_decode(self, encoder, encoder_outs,bsz,src_tokens, beam_size=None, maxlen=None, prefix_tokens=None):
+    def _greedy_decode(self, encoder, encoder_outs, src_tokens, bsz, beam_size=None, maxlen=None, prefix_tokens=None):
         """See generate"""
         maxlen = min(maxlen, self.maxlen) if maxlen is not None else self.maxlen
 
@@ -95,6 +95,15 @@ class GreedyGenerator(object):
         beam_size = min(beam_size, self.vocab_size - 1)
 
         incremental_states = {}
+
+        for decoder in self.decoders:
+            if not self.retain_dropout:
+                decoder.eval()
+            if isinstance(decoder, FairseqIncrementalDecoder):
+                incremental_states[decoder] = {}
+            else:
+                incremental_states[decoder] = None
+
         # initialize buffers
         scores = src_tokens.data.new(bsz * beam_size, maxlen + 1).float().fill_(0)
         scores_buf = scores.clone()
@@ -452,7 +461,7 @@ class GreedyGenerator(object):
 
     def _decode_one(self, tokens, decoder, encoder_out, incremental_states, log_probs):
         with torch.no_grad():
-            if incremental_states[decoder] is not None:
+            if decoder in incremental_states and incremental_states[decoder] is not None:
                 decoder_out = list(decoder(tokens, encoder_out, incremental_state=incremental_states[decoder]))
             else:
                 decoder_out = list(decoder(tokens, encoder_out))
@@ -464,5 +473,5 @@ class GreedyGenerator(object):
                 if type(attn) is dict:
                     attn = attn['attn']
                 attn = attn[:, -1, :]
-        probs = decoder.get_normalized_probs(decoder_out, log_probs=log_probs)
+        probs = decoder.get_normalized_probs(decoder_out, log_probs=log_probs, sample=None)
         return probs, attn

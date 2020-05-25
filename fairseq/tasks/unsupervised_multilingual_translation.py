@@ -15,7 +15,8 @@ from fairseq.data import (
     Dictionary, LanguagePairDataset, IndexedInMemoryDataset,
     IndexedRawTextDataset, RoundRobinZipDatasets,
 )
-from fairseq.models import FairseqMultiModel
+
+from fairseq.models.fairseq_model import FairseqMultiUnsupModel
 from fairseq.models.fairseq_model import  FairseqInterlinguaModel
 
 from . import FairseqTask, register_task
@@ -65,11 +66,15 @@ class UnsupervisedMultilingualTranslationTask(FairseqTask):
                             help='max number of tokens in the source sequence')
         parser.add_argument('--max-target-positions', default=1024, type=int, metavar='N',
                             help='max number of tokens in the target sequence')
+        parser.add_argument('--pivot-lang-pairs', default=None, metavar='PPAIRS',
+                            help='comma-separated list of language pairs (in training order): en-de,en-fr,de-fr')
 
-    def __init__(self, args, dicts, training):
+    def __init__(self, args, dicts, pivot_dicts, training):
         super().__init__(args)
         self.dicts = dicts
+        self.pivot_dicts = pivot_dicts
         self.langs = list(dicts.keys())
+        self.pivot_langs = list(pivot_dicts.keys())
         self.training = training
 
     @classmethod
@@ -90,11 +95,12 @@ class UnsupervisedMultilingualTranslationTask(FairseqTask):
             args.lang_pairs = args.lang_pairs.split(',')
             args.source_lang, args.target_lang = args.lang_pairs[0].split('-')
 
-        langs = list({x for lang_pair in args.lang_pairs for x in lang_pair.split('-')})
+        langs = [lp.split('-')[0] for lp in args.lang_pairs]
+        pivot_langs = [lp.split('-')[1] for lp in args.lang_pairs]
 
         # load dictionaries
         dicts = OrderedDict()
-        for lang in langs:
+        for lang in langs :
             dicts[lang] = Dictionary.load(os.path.join(args.data, 'dict.{}.txt'.format(lang)))
             if len(dicts) > 0:
                 assert dicts[lang].pad() == dicts[langs[0]].pad()
@@ -102,7 +108,19 @@ class UnsupervisedMultilingualTranslationTask(FairseqTask):
                 assert dicts[lang].unk() == dicts[langs[0]].unk()
             print('| [{}] dictionary: {} types'.format(lang, len(dicts[lang])))
 
-        return cls(args, dicts, training)
+        #load pivot languages dictionaries
+        pivot_dicts = OrderedDict()
+        for lang in pivot_langs:
+            pivot_dicts[lang] = Dictionary.load(os.path.join(args.data, 'dict.{}.txt'.format(lang)))
+            if len(dicts) > 0:
+                assert pivot_dicts[lang].pad() == pivot_dicts[pivot_langs[0]].pad()
+                assert pivot_dicts[lang].eos() == pivot_dicts[pivot_langs[0]].eos()
+                assert pivot_dicts[lang].unk() == pivot_dicts[pivot_langs[0]].unk()
+
+            print('| [{}] dictionary: {} types'.format(lang, len(pivot_dicts[lang])))
+            print('| [{}] dictionary: {} types'.format(lang, len(pivot_dicts[lang])))
+
+        return cls(args, dicts, pivot_dicts, training)
 
     def load_dataset(self, split, **kwargs):
         """Load a dataset split."""
@@ -125,32 +143,36 @@ class UnsupervisedMultilingualTranslationTask(FairseqTask):
         def sort_lang_pair(lang_pair):
             return '-'.join(sorted(lang_pair.split('-')))
 
-        src_datasets, tgt_datasets = {}, {}
+        src_datasets = {}
         for lang_pair in set(map(sort_lang_pair, self.args.lang_pairs)):
-            src, tgt = lang_pair.split('-')
-            if split_exists(split, src, tgt, src):
-                prefix = os.path.join(self.args.data, '{}.{}-{}.'.format(split, src, tgt))
-            elif split_exists(split, tgt, src, src):
-                prefix = os.path.join(self.args.data, '{}.{}-{}.'.format(split, tgt, src))
+            src, pivot = lang_pair.split('-')
+            if split_exists(split, src, pivot, src):
+                prefix = os.path.join(self.args.data, '{}.{}-{}.'.format(split, src, pivot))
+            elif split_exists(split, pivot, src, src):
+                prefix = os.path.join(self.args.data, '{}.{}-{}.'.format(split, pivot, src))
             else:
                 continue
             src_datasets[lang_pair] = indexed_dataset(prefix + src, self.dicts[src])
-            tgt_datasets[lang_pair] = indexed_dataset(prefix + tgt, self.dicts[tgt])
             print('| {} {} {} examples'.format(self.args.data, split, len(src_datasets[lang_pair])))
 
         if len(src_datasets) == 0:
             raise FileNotFoundError('Dataset not found: {} ({})'.format(split, self.args.data))
 
-        def language_pair_dataset(lang_pair):
-            src, tgt = lang_pair.split('-')
-            if lang_pair in src_datasets:
-                src_dataset, tgt_dataset = src_datasets[lang_pair], tgt_datasets[lang_pair]
-            else:
-                lang_pair = sort_lang_pair(lang_pair)
-                tgt_dataset, src_dataset = src_datasets[lang_pair], tgt_datasets[lang_pair]
+        def monolingual_dataset(lang_pair):
+            '''
+            src, pivot = lang_pair.split('-')
+            dataset = src_datasets[lang_pair]
+            sizes = dataset.sizes
+
+            return MonolingualDataset(
+            dataset, sizes, self.dicts[src], self.dicts[src],add_eos_for_other_targets=False,shuffle=True)
+            '''
+            src, pivot = lang_pair.split('-')
+            dataset = src_datasets[lang_pair]
+            sizes = dataset.sizes
             return LanguagePairDataset(
-                src_dataset, src_dataset.sizes, self.dicts[src],
-                tgt_dataset, tgt_dataset.sizes, self.dicts[tgt],
+                dataset, dataset.sizes, self.dicts[src],
+                dataset, dataset.sizes, self.dicts[src],
                 left_pad_source=self.args.left_pad_source,
                 left_pad_target=self.args.left_pad_target,
                 max_source_positions=self.args.max_source_positions,
@@ -159,7 +181,7 @@ class UnsupervisedMultilingualTranslationTask(FairseqTask):
 
         self.datasets[split] = RoundRobinZipDatasets(
             OrderedDict([
-                (lang_pair, language_pair_dataset(lang_pair))
+                (lang_pair, monolingual_dataset(lang_pair))
                 for lang_pair in self.args.lang_pairs
             ]),
             eval_key=None if self.training else self.args.lang_pairs[0],
@@ -177,8 +199,8 @@ class UnsupervisedMultilingualTranslationTask(FairseqTask):
     def build_model(self, args):
         from fairseq import models
         model = models.build_model(args, self)
-        if not isinstance(model, FairseqMultiModel):
-            raise ValueError('MultilingualTranslationTask requires a FairseqMultiModel architecture')
+        if not isinstance(model, FairseqMultiUnsupModel):
+            raise ValueError('MultilingualUnsupervisedTranslationTask requires a FairseqMultiUnsupModel architecture')
         return model
 
     def train_step(self, sample, model, criterion, optimizer, ignore_grad=False):
@@ -257,4 +279,6 @@ class UnsupervisedMultilingualTranslationTask(FairseqTask):
 
     @property
     def target_dictionary(self):
-        return self.dicts[self.args.target_lang]
+        #This task performs auto-encoding through iterative backtranslation over the trained modules.
+        # therefore source == target
+        return self.dicts[self.args.source_lang]

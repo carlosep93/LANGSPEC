@@ -321,7 +321,7 @@ def load_ensemble_for_inference(filenames, task, model_arg_overrides=None,pair=N
 
         # build model for ensemble
         model = task.build_model(args)
-        #model.upgrade_state_dict(state['model'])
+        model.upgrade_state_dict(state['model'])
         model.load_state_dict(state['model'], strict=True)
         ensemble.append(model)
 

@@ -155,6 +155,56 @@ class Trainer(object):
                 p.requires_grad = False
         return extra_state
 
+    def load_pivot_checkpoint(self, filename,key,pivot_key,pivot_lang,reset_optimizer=False, reset_lr_scheduler=False, optimizer_overrides=None, finetune=False,path=None):
+        """Load all training state from a checkpoint file."""
+        extra_state, self._optim_history, last_optim_state = \
+            utils.load_partial_model_state(filename,self.get_model(),key,finetune)
+        if last_optim_state is not None and not reset_optimizer:
+            # rebuild optimizer after loading model, since params may have changed
+            self._build_optimizer()
+
+            # only reload optimizer and lr_scheduler if they match
+            last_optim = self._optim_history[-1]
+            assert last_optim['criterion_name'] == self.criterion.__class__.__name__, \
+                'criterion does not match; please reset the optimizer (--reset-optimizer)'
+            assert last_optim['optimizer_name'] == self.optimizer.__class__.__name__, \
+                'optimizer does not match; please reset the optimizer (--reset-optimizer)'
+
+            if not reset_lr_scheduler:
+                self.lr_scheduler.load_state_dict(last_optim['lr_scheduler_state'])
+            self.optimizer.load_state_dict(last_optim_state, optimizer_overrides)
+
+            self._num_updates = last_optim['num_updates']
+
+        if extra_state is not None and 'train_meters' in extra_state:
+            self.meters.update(extra_state['train_meters'])
+            del extra_state['train_meters']
+
+            # reset TimeMeters, since their start times don't make sense anymore
+            for meter in self.meters.values():
+                if isinstance(meter, TimeMeter):
+                    meter.reset()
+
+        #Freeze pretrained part of the model
+        if reuse in ['encoder','both']:
+            self.model.encoder.train(False)
+            for p in self.model.encoder.parameters():
+                p.requires_grad = False
+
+        if reuse in ['decoder','both']:
+            self.model.decoder.train(False)
+            for p in self.model.decoder.parameters():
+                p.requires_grad = False
+
+
+        if reuse == 'both':
+            m =    self.model.encoder.embed_tokens
+            m.train(True)
+            for p in m.parameters():
+                p.requires_grad = True
+
+
+        return extra_state
 
     def load_partial_checkpoint(self, filename,key,newkey, reuse,reset_optimizer=False, reset_lr_scheduler=False, optimizer_overrides=None, finetune=False,path=None):
         """Load all training state from a checkpoint file."""
