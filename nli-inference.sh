@@ -1,16 +1,16 @@
 #!/bin/bash
 
 
-#SBATCH -p veu # Partition to submit to
+#SBATCH -p veu-fast # Partition to submit to
 #SBATCH --gres=gpu:1
 #SBATCH --mem=10G # Memory
 #SBATCH --ignore-pbs                                                            
-#SBATCH --output=multinli-results/multinli-basic-tied.log
+#SBATCH --output=multinli-results/multinli-frozen-tied.log
 
 
 WORKING_DIR="/veu4/usuaris31/mruiz/large-projections/corpus/"
 DEST_DIR="data-bin/multinli/"
-CP_DIR="checkpoints/multinli-basic-tied/"
+CP_DIR="checkpoints/multinli-frozen-tied/"
 CP="checkpoint_best.pt"
 ENC_DIR="/scratch/carlos/europarl-big3-tie-embs/"
 
@@ -34,3 +34,6 @@ for l1 in de en es fr; do
 done
 
 
+ENC_DIR="/scratch/carlos/add-ruen-tied/"
+
+inference ru

@@ -1,18 +1,18 @@
 #!/bin/bash
 
 
-#SBATCH -p veu # Partition to submit to
+#SBATCH -p veu-fast # Partition to submit to
 #SBATCH --gres=gpu:1
 #SBATCH --mem=10G # Memory
 #SBATCH --ignore-pbs                                                            
-#SBATCH --output=basic-tied-logs/generate-rufr-basic-tied-ru.log
+#SBATCH --output=adapt-notie-logs/generate-esfr.log
 
 
 WORKING_DIR="/veu4/usuaris31/mruiz/large-projections/corpus/"
-SRC="ru"
+SRC="es"
 TGT="fr"
 DEST_DIR="data-bin/europarl/"
-CP_DIR="/scratch/carlos/europarl-basic-tied-ru/"
+CP_DIR="/scratch/carlos/europarl-adapt-notied"
 CP="checkpoint_best.pt"
 
 stdbuf -i0 -e0 -o0 python generate.py $DEST_DIR --path $CP_DIR/$CP \
