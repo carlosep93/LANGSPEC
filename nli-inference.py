@@ -41,8 +41,7 @@ def main(args):
 
     # Load ensemble
     print('| loading model(s) from {}'.format(args.path))
-    model,_ = utils.load_ensemble_for_inference([args.path], task, model_arg_overrides=eval(args.model_overrides))
-    model = model[0]
+    model = utils.load_nli_model_for_inference(args.path, task, model_arg_overrides=eval(args.model_overrides))
 
     model.make_generation_fast_(
             beamable_mm_beam_size=none if args.no_beamable_mm else args.beam,

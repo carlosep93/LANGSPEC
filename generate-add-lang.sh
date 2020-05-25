@@ -1,19 +1,19 @@
 #!/bin/bash
 
 
-#SBATCH -p veu # Partition to submit to
+#SBATCH -p veu-fast # Partition to submit to
 #SBATCH --gres=gpu:1
 #SBATCH --mem=10G # Memory
 #SBATCH --ignore-pbs                                                            
-#SBATCH --output=basic-tied-logs/generate-add-rufr-basic-tied.log
+#SBATCH --output=wmt20-logs/generate-add-taen.log
 
 
 WORKING_DIR="/veu4/usuaris31/mruiz/large-projections/corpus/"
-SRC="ru"
-TGT="fr"
-DEST_DIR="data-bin/europarl"
-ENC_CP_DIR="/scratch/carlos/add-ruen-basic-tied/"
-DEC_CP_DIR="/scratch/carlos/europarl-basic-tied/"
+SRC="ta"
+TGT="en"
+DEST_DIR="data-bin/wmt20"
+ENC_CP_DIR="/scratch/carlos/add-taen-basic-tied/"
+DEC_CP_DIR="/scratch/carlos/add-taen-basic-tied/"
 CP="checkpoint_best.pt"
 
 # stdbuf -i0 -e0 -o0 python generate-add-lang.py $DEST_DIR --path $CP_DIR/$CP \
@@ -25,9 +25,9 @@ CP="checkpoint_best.pt"
 
 stdbuf -i0 -e0 -o0 python generate-add-lang.py $DEST_DIR --path $CP_DIR/$CP \
     --beam 5 --batch-size 5 --source-lang ${SRC} --target-lang ${TGT} --task multilingual_translation \
-    --enc-model $ENC_CP_DIR/$CP   --enc-key ru-en \
-    --dec-model $DEC_CP_DIR/$CP  --dec-key en-fr \
-    --newkey ru-fr  --newarch multilingual_transformer \
+    --enc-model $ENC_CP_DIR/$CP   --enc-key ta-en \
+    --dec-model $DEC_CP_DIR/$CP  --dec-key ta-en \
+    --newkey ta-en  --newarch multilingual_transformer \
     --newtask multilingual_translation --remove-bpe 
 
 

@@ -119,7 +119,7 @@ class NliClassifierModel(BaseFairseqModel):
                 embed_dict = utils.parse_embedding(path)
                 utils.load_embedding(embed_dict, dictionary, emb)
             return emb
-
+        
         if args.share_all_embeddings:
             if ref_dict != hyp_dict:
                 raise ValueError('--share-all-embeddings requires a joined dictionary')
@@ -137,8 +137,8 @@ class NliClassifierModel(BaseFairseqModel):
             encoder_embed_tokens = build_embedding(
                 ref_dict, args.encoder_embed_dim, args.encoder_embed_path
             )
-
-
+        
+        
         encoder = TransformerEncoder(args, ref_dict, encoder_embed_tokens)
         classifier = nn.Sequential(*[
             torch.nn.Dropout(args.class_dropout),
@@ -162,7 +162,8 @@ class NliClassifierModel(BaseFairseqModel):
 
             encoder_ref_out = encoder_ref_out['encoder_out']
             encoder_hyp_out = encoder_hyp_out['encoder_out']
-
+            
+            '''
             #apply masking
             if not encoder_ref_padding_mask is None:
                 encoder_ref_padding_mask = encoder_ref_padding_mask.t().unsqueeze(-1).repeat(1,1,encoder_ref_out.shape[-1])
@@ -177,11 +178,13 @@ class NliClassifierModel(BaseFairseqModel):
                         encoder_hyp_padding_mask,
                         float('-inf'),
                     ).type_as(encoder_hyp_out)
+            '''
+        
+            #encoder_ref_out = torch.max(encoder_ref_out.permute(1,0,2),1).values
+            #encoder_hyp_out = torch.max(encoder_hyp_out.permute(1,0,2),1).values
 
-
-            encoder_ref_out = torch.max(encoder_ref_out.permute(1,0,2),1).values
-            encoder_hyp_out = torch.max(encoder_hyp_out.permute(1,0,2),1).values
-
+            encoder_ref_out = encoder_ref_out.permute(1,0,2).mean(dim=1)
+            encoder_hyp_out = encoder_hyp_out.permute(1,0,2).mean(dim=1)
 
         #CHECK IF THE RESULT IS TRANSPOSED
         elem_wise_mul = torch.mul(encoder_ref_out,encoder_hyp_out)

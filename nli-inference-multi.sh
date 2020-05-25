@@ -1,17 +1,17 @@
 #!/bin/bash
 
 
-#SBATCH -p veu # Partition to submit to
+#SBATCH -p veu-fast # Partition to submit to
 #SBATCH --gres=gpu:1
 #SBATCH --mem=10G # Memory
 #SBATCH --ignore-pbs                                                            
-#SBATCH --output=multinli-results/multinli-multi-joint-noru.log
+#SBATCH --output=multinli-results/multinli-multi-lstm.log
 
 
 DEST_DIR="../fairseq/data-bin/multinli-joint-no-ru/"
-CP_DIR="checkpoints/multinli-baseline-tied"
+CP_DIR="checkpoints/multinli-baseline-lstm"
 CP="checkpoint_best.pt"
-ENC_DIR="/scratch/carlos/baseline-share-embeddings"
+ENC_DIR="/scratch/carlos/europarl-multi-lstm-4layers/"
 key="src-tgt"
 
 

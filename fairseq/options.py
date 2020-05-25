@@ -382,6 +382,7 @@ def add_encode_args(parser):
 
 def add_interactive_args(parser):
     group = parser.add_argument_group('Interactive')
+    group.add_argument('--maxlength', default=220, type=int, metavar='N',help='max length of encoding')
     group.add_argument('--buffer-size', default=0, type=int, metavar='N',
                        help='read this many sentences into a buffer before processing them')
 
