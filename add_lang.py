@@ -73,6 +73,7 @@ def main(args):
         shard_id=args.distributed_rank,
     )
 
+    print('load previous model')
     #Load partial previous model
     load_previous_model(args,trainer)
 
@@ -339,11 +340,6 @@ def load_checkpoint(args, trainer, epoch_itr):
                 save_checkpoint.best = extra_state['best']
         return True
     return False
-
-
-
-
-
 
 def load_dataset_splits(task, splits):
     for split in splits:
