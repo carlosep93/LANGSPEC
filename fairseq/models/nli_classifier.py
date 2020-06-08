@@ -142,7 +142,7 @@ class NliClassifierModel(BaseFairseqModel):
         encoder = TransformerEncoder(args, ref_dict, encoder_embed_tokens)
         classifier = nn.Sequential(*[
             torch.nn.Dropout(args.class_dropout),
-            torch.nn.Linear(args.encoder_embed_dim*4,args.class_hidden_size),
+            torch.nn.Linear(args.encoder_embed_dim*2,args.class_hidden_size),
             torch.nn.Linear(args.class_hidden_size,3),
             torch.nn.LogSoftmax()
         ])
@@ -153,6 +153,7 @@ class NliClassifierModel(BaseFairseqModel):
         self.embeddings.eval()
         with torch.no_grad():
 
+            print(reference.data.tolist())
 
             encoder_ref_out = self.encoder(reference,ref_lengths)
             encoder_hyp_out = self.encoder(hypothesis,hyp_lengths)
@@ -163,7 +164,7 @@ class NliClassifierModel(BaseFairseqModel):
             encoder_ref_out = encoder_ref_out['encoder_out']
             encoder_hyp_out = encoder_hyp_out['encoder_out']
             
-            '''
+
             #apply masking
             if not encoder_ref_padding_mask is None:
                 encoder_ref_padding_mask = encoder_ref_padding_mask.t().unsqueeze(-1).repeat(1,1,encoder_ref_out.shape[-1])
@@ -178,7 +179,7 @@ class NliClassifierModel(BaseFairseqModel):
                         encoder_hyp_padding_mask,
                         float('-inf'),
                     ).type_as(encoder_hyp_out)
-            '''
+
         
             #encoder_ref_out = torch.max(encoder_ref_out.permute(1,0,2),1).values
             #encoder_hyp_out = torch.max(encoder_hyp_out.permute(1,0,2),1).values
@@ -187,11 +188,11 @@ class NliClassifierModel(BaseFairseqModel):
             encoder_hyp_out = encoder_hyp_out.permute(1,0,2).mean(dim=1)
 
         #CHECK IF THE RESULT IS TRANSPOSED
-        elem_wise_mul = torch.mul(encoder_ref_out,encoder_hyp_out)
-        abs_dif = torch.abs(encoder_ref_out - encoder_hyp_out)
+        #elem_wise_mul = torch.mul(encoder_ref_out,encoder_hyp_out)
+        #abs_dif = torch.abs(encoder_ref_out - encoder_hyp_out)
         out = torch.cat((encoder_ref_out,encoder_hyp_out),1)
-        out = torch.cat((out,abs_dif),1)
-        out = torch.cat((out,elem_wise_mul),1)
+        #out = torch.cat((out,abs_dif),1)
+        #out = torch.cat((out,elem_wise_mul),1)
         out = self.classifier(out)
 
         return out

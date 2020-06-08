@@ -41,7 +41,7 @@ def get_unsup_train_parser(default_task='translation'):
     add_model_args(parser)
     add_optimization_args(parser)
     add_checkpoint_args(parser)
-    unsup_args(parser)
+    add_unsup_args(parser)
     return parser
 
 def get_generation_add_lang_parser(interactive=False, default_task='translation'):
@@ -428,14 +428,13 @@ def add_lang_args(parser):
     group.add_argument('--reuse',default='encoder',type=str, help='Which part of the previous model to use', choices=['encoder','decoder','both'])
     group.add_argument('--finetune',default='False',type=str, help='Fine tune parameters from a previous language', choices=['True','False'])
 
-def unsup_args(parser):
+def add_unsup_args(parser):
     group = parser.add_argument_group('Unsup')
-    group.add_argument('--key', default='en-en',type=str, help='Key in pretrained model')
-    group.add_argument('--newkey', default='en-en',type=str, help='Key in new model')
+    group.add_argument('--keys', nargs='+', type=str, help='Keys in pretrained model')
+    group.add_argument('--newkeys', nargs='+',type=str, help='Keys  in new  unsupervised model')
     group.add_argument('--prev-model',default='',type=str, help='Path to previous model')
-    group.add_argument('--pivot-key',default='',type=str, help='Key from the previous model to use///')
-    group.add_argument('--pivot-lang',default='',type=str, help='lang from the previous model to reuse')
-    group.add_argument('--finetune',default='False',type=str, help='Fine tune parameters from a previous language', choices=['True','False'])
+    group.add_argument('--pivot-prev-model',default='',type=str, help='Path to previous model for pivot languages')
+    group.add_argument('--pivotkeys', nargs='+',type=str, help='Keys from the trained model to be used as pivots')
 
 
 def add_model_args(parser):

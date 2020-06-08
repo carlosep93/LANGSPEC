@@ -413,19 +413,23 @@ class FairseqMultiUnsupModel(BaseFairseqModel):
             assert isinstance(pivot_encoders[key], FairseqEncoder)
             assert isinstance(pivot_decoders[key], FairseqDecoder)
 
+
         self.greedy_generators = {lang:GreedyGenerator([pivot_decoders[lang]],
                                                        pivot_dicts[lang],
                                                        maxlen=10)
                                                        for lang in self.pivot_keys}
 
         self.models = nn.ModuleDict({
-            key:FairseqUnsupModel(encoders[key],
+            key+'-'+pkey:FairseqUnsupModel(encoders[key],
                                   decoders[key],
                                   pivot_encoders[pkey],
                                   pivot_decoders[pkey],
                                   self.greedy_generators[pkey])
             for key,pkey in zip(self.keys, self.pivot_keys)
         })
+
+        self.keys = ['-'.join([k,p]) for k in self.keys for p in self.pivot_keys]
+
         '''
         self.models = nn.ModuleDict({
             key: FairseqModel(encoders[key], decoders[key])
@@ -472,7 +476,7 @@ class FairseqMultiUnsupModel(BaseFairseqModel):
         """Maximum length supported by the model."""
         return {
             key: (self.models[key].encoder.max_positions(), self.models[key].decoder.max_positions())
-            for key in self.keys
+            for key in self.keys for pkey in self.pivot_keys
         }
 
     def max_decoder_positions(self):

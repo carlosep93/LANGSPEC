@@ -78,6 +78,9 @@ def main(args):
         shard_id=args.distributed_rank,
     )
 
+    # Load partial unsupervised mpdeñ
+    load_partial_models_for_unsup_training(args, trainer)
+
     # Load the latest checkpoint if one is available
     if not load_checkpoint(args, trainer, epoch_itr) and  not 'speech' in args.task:
         trainer.dummy_train_step([dummy_batch])
@@ -337,6 +340,25 @@ def save_checkpoint(args, trainer, epoch_itr, val_loss):
         checkpoints = utils.checkpoint_paths(args.save_dir, pattern=r'checkpoint_\d+_(\d+)\.pt')
         for old_chk in checkpoints[args.keep_interval_updates:]:
             os.remove(old_chk)
+
+
+
+def load_partial_models_for_unsup_training(args, trainer):
+    """Load a checkpoint and replay dataloader to match."""
+    os.makedirs(args.save_dir, exist_ok=True)
+    checkpoint_path = os.path.join(args.prev_model, args.restore_file)
+    pivot_checkpoint_path = os.path.join(args.pivot_prev_model, args.restore_file)
+    if os.path.isfile(checkpoint_path):
+        trainer.load_checkpoint_for_unsup_training(checkpoint_path,
+                                                   pivot_checkpoint_path,
+                                                   args.keys,args.pivotkeys,
+                                                   args.newkeys,
+                                                   args.reset_optimizer,
+                                                   args.reset_lr_scheduler,
+                                                   eval(args.optimizer_overrides))
+        return True
+    return False
+
 
 def load_nli_encoder(task,model, trainer):
     trainer.load_nli_encoder(task,model)

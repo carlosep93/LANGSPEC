@@ -155,10 +155,10 @@ class Trainer(object):
                 p.requires_grad = False
         return extra_state
 
-    def load_pivot_checkpoint(self, filename,key,pivot_key,pivot_lang,reset_optimizer=False, reset_lr_scheduler=False, optimizer_overrides=None, finetune=False,path=None):
+    def load_checkpoint_for_unsup_training(self,filename,pivot_filename,keys,pivot_keys,new_keys, reset_optimizer=False, reset_lr_scheduler=False, optimizer_overrides=None, finetune=False,path=None):
         """Load all training state from a checkpoint file."""
         extra_state, self._optim_history, last_optim_state = \
-            utils.load_partial_model_state(filename,self.get_model(),key,finetune)
+            utils.load_partial_unsup_model_state(filename,pivot_filename,self.get_model(),keys,pivot_keys, new_keys)
         if last_optim_state is not None and not reset_optimizer:
             # rebuild optimizer after loading model, since params may have changed
             self._build_optimizer()
@@ -184,25 +184,6 @@ class Trainer(object):
             for meter in self.meters.values():
                 if isinstance(meter, TimeMeter):
                     meter.reset()
-
-        #Freeze pretrained part of the model
-        if reuse in ['encoder','both']:
-            self.model.encoder.train(False)
-            for p in self.model.encoder.parameters():
-                p.requires_grad = False
-
-        if reuse in ['decoder','both']:
-            self.model.decoder.train(False)
-            for p in self.model.decoder.parameters():
-                p.requires_grad = False
-
-
-        if reuse == 'both':
-            m =    self.model.encoder.embed_tokens
-            m.train(True)
-            for p in m.parameters():
-                p.requires_grad = True
-
 
         return extra_state
 
