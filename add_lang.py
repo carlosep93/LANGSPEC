@@ -73,6 +73,7 @@ def main(args):
         shard_id=args.distributed_rank,
     )
 
+    print('load previous model')
     #Load partial previous model
     load_previous_model(args,trainer)
 
@@ -335,7 +336,9 @@ def load_previous_model(args, trainer):
     """Load a checkpoint and replay dataloader to match."""
     os.makedirs(args.save_dir, exist_ok=True)
     checkpoint_path = os.path.join(args.prev_model, args.restore_file)
+    print(checkpoint_path)
     if os.path.isfile(checkpoint_path):
+        print('restoring file', checkpoint_path)
         trainer.load_partial_checkpoint(checkpoint_path,args.key, args.newkey, args.reuse, args.reset_optimizer, args.reset_lr_scheduler,
                                               eval(args.optimizer_overrides))
         return True
