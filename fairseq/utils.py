@@ -121,11 +121,14 @@ def get_nli_encoder(model,key,filename):
     model.upgrade_state_dict(state['model'])
 
 
-def load_partial_unsup_model_state(filename, pivot_filename ,model,keys,pivotkeys,newkeys,path=None):
-    if not os.path.exists(filename) or not os.path.exists(pivot_filename):
+def load_partial_unsup_model_state(enc_filename,dec_filename,pivot_filename ,model,keys,pivotkeys,newkeys,path=None):
+    if not os.path.exists(enc_filename) or not os.path.exists(dec_filename) or not os.path.exists(pivot_filename):
         return None, [], None
-    state = torch.load(filename, map_location=lambda s, l: default_restore_location(s, 'cpu'))
-    state = _upgrade_state_dict(state)
+    enc_state = torch.load(enc_filename, map_location=lambda s, l: default_restore_location(s, 'cpu'))
+    enc_state = _upgrade_state_dict(enc_state)
+
+    dec_state = torch.load(dec_filename, map_location=lambda s, l: default_restore_location(s, 'cpu'))
+    dec_state = _upgrade_state_dict(dec_state)
 
     pivot_state = torch.load(pivot_filename, map_location=lambda s, l: default_restore_location(s, 'cpu'))
     pivot_state = _upgrade_state_dict(pivot_state)
@@ -133,23 +136,25 @@ def load_partial_unsup_model_state(filename, pivot_filename ,model,keys,pivotkey
     model_state = OrderedDict()
     pivot_model_state = OrderedDict()
     for key, newkey, pivotkey in zip(keys,newkeys,pivotkeys):
-        model_state.update(OrderedDict({k.replace(key,newkey):v for k,v in state['model'].items() if key  in k}))
+        rev_key = key.split('-')[1] + '-' + key.split('-')[0]
+        model_state.update(OrderedDict({k.replace(key,newkey):v for k,v in enc_state['model'].items() if key + '.encoder' in k}))
+        model_state.update(OrderedDict({k.replace(rev_key,newkey):v for k,v in enc_state['model'].items() if rev_key + '.decoder' in k}))
         rev_pkey = pivotkey.split('-')[1] + '-' + pivotkey.split('-')[0]
         pivot_model_state.update(OrderedDict({k.replace(pivotkey + '.encoder',newkey + '.pivot_encoder'):v for k,v in pivot_state['model'].items() if pivotkey + '.encoder' in k}))
         pivot_model_state.update(OrderedDict({k.replace(rev_pkey + '.decoder',newkey + '.pivot_decoder'):v for k,v in pivot_state['model'].items() if rev_pkey + '.decoder' in k}))
 
     model_state.update(pivot_model_state)
-    state['model'] = model_state
+    enc_state['model'] = model_state
 
-    model.load_state_dict(state['model'], strict=False)
+    model.load_state_dict(enc_state['model'], strict=False)
     # load model parameters
     try:
-        model.load_state_dict(state['model'], strict=False)
+        model.load_state_dict(enc_state['model'], strict=False)
     except Exception:
         raise Exception('Cannot load model parameters from checkpoint, '
                         'please ensure that the architectures match')
 
-    return state['extra_state'], state['optimizer_history'], state['last_optimizer_state']
+    return enc_state['extra_state'], enc_state['optimizer_history'], enc_state['last_optimizer_state']
 
 
 def load_partial_model_state(filename, model,key,newkey,reuse,finetune,path=None):
