@@ -400,7 +400,7 @@ class FairseqUnsupModel(BaseFairseqModel):
 
 class FairseqMultiUnsupModel(BaseFairseqModel):
     """Base class for combining multiple encoder-decoder models."""
-    def __init__(self, encoders, decoders,pivot_encoders, pivot_decoders, pivot_dicts):
+    def __init__(self, encoders, decoders,pivot_encoders, pivot_decoders, pivot_dicts,maxlen=1024):
         super().__init__()
         #assert encoders.keys() == decoders.keys()
 
@@ -418,7 +418,7 @@ class FairseqMultiUnsupModel(BaseFairseqModel):
 
         self.greedy_generators = {lang:GreedyGenerator([pivot_decoders[lang]],
                                                        pivot_dicts[lang],
-                                                       maxlen=1024)
+                                                       maxlen=maxlen)
                                                        for lang in self.pivot_keys}
 
         self.models = nn.ModuleDict({

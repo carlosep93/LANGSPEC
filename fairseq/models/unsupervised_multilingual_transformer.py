@@ -40,8 +40,8 @@ class UnsupervisedMultilingualTransformerModel(FairseqMultiUnsupModel):
         --share-decoders: share all decoder params (incl. embeddings) across all target languages
     """
 
-    def __init__(self, encoders, decoders, pivot_encoders, pivot_decoders, pivot_dicts):
-        super().__init__(encoders, decoders,pivot_encoders, pivot_decoders, pivot_dicts)
+    def __init__(self, encoders, decoders, pivot_encoders, pivot_decoders, pivot_dicts,maxlen):
+        super().__init__(encoders, decoders,pivot_encoders, pivot_decoders, pivot_dicts,maxlen)
 
     @staticmethod
     def add_args(parser):
@@ -54,6 +54,8 @@ class UnsupervisedMultilingualTransformerModel(FairseqMultiUnsupModel):
         parser.add_argument('--share-encoders', action='store_true',
                             help='share encoders across languages')
         parser.add_argument('--share-decoders', action='store_true',
+                            help='share decoders across languages')
+        parser.add_argument('--pivot-maxlen', type=int,default=1024,
                             help='share decoders across languages')
 
     @classmethod
@@ -167,12 +169,13 @@ class UnsupervisedMultilingualTransformerModel(FairseqMultiUnsupModel):
             pivot_encoders[lang] = shared_encoder if shared_encoder is not None else get_encoder(src,task.pivot_dicts[lang])
             pivot_decoders[lang] = shared_decoder if shared_decoder is not None else get_decoder(tgt,task.pivot_dicts[lang])
 
-
+        print('PIVOT MAXLEN', args.pivot_maxlen)
         return UnsupervisedMultilingualTransformerModel(encoders,
                                                         decoders,
                                                         pivot_encoders,
                                                         pivot_decoders,
-                                                        task.pivot_dicts)
+                                                        task.pivot_dicts,
+                                                        args.pivot_maxlen)
 
 
 @register_model_architecture('unsupervised_multilingual_transformer', 'unsupervised_multilingual_transformer')
