@@ -376,7 +376,8 @@ class FairseqUnsupModel(BaseFairseqModel):
                                                     src_tokens.shape[0])
 
             #Prepare generated data to be encoded
-            p_srclens = torch.IntTensor([g[0]['tokens'].shape[0] for g in p_generated])
+            #Compute generated lengths until the end_of_sentence token is generated
+            p_srclens = torch.IntTensor([(g[0]['tokens']==2).nonzero()[0][0] +1  for g in p_generated])
 
             maxlen = max(p_srclens.data.tolist())
             bsz = p_srclens.shape[0]
