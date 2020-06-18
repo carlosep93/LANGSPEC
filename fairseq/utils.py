@@ -138,11 +138,17 @@ def load_partial_unsup_model_state(enc_filename,dec_filename,pivot_filename ,mod
     for key, newkey, pivotkey in zip(keys,newkeys,pivotkeys):
         rev_key = key.split('-')[1] + '-' + key.split('-')[0]
         model_state.update(OrderedDict({k.replace(key,newkey):v for k,v in enc_state['model'].items() if key + '.encoder' in k}))
-        model_state.update(OrderedDict({k.replace(rev_key,newkey):v for k,v in enc_state['model'].items() if rev_key + '.decoder' in k}))
+        print('Key', key, 'Rev_key', rev_key)
+        print('Model state after loading encoder', len(model_state))
+        model_state.update(OrderedDict({k.replace(rev_key,newkey):v for k,v in dec_state['model'].items() if rev_key + '.decoder' in k}))
+        print('Model state after loading decoder', len(model_state))
         rev_pkey = pivotkey.split('-')[1] + '-' + pivotkey.split('-')[0]
         pivot_model_state.update(OrderedDict({k.replace(pivotkey + '.encoder',newkey + '.pivot_encoder'):v for k,v in pivot_state['model'].items() if pivotkey + '.encoder' in k}))
         pivot_model_state.update(OrderedDict({k.replace(rev_pkey + '.decoder',newkey + '.pivot_decoder'):v for k,v in pivot_state['model'].items() if rev_pkey + '.decoder' in k}))
-
+    
+    print('Original enc state', len(enc_state['model']))
+    print('Model state params', len(model_state))
+    print('Pivot state params', len(pivot_model_state))
     model_state.update(pivot_model_state)
     enc_state['model'] = model_state
 

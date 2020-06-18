@@ -144,7 +144,7 @@ class UnsupervisedMultilingualTranslationTask(FairseqTask):
             return '-'.join(sorted(lang_pair.split('-')))
 
         src_datasets = {}
-        for lang_pair in set(map(sort_lang_pair, self.args.lang_pairs)):
+        for lang_pair in self.args.lang_pairs:
             src, pivot = lang_pair.split('-')
             if split_exists(split, src, pivot, src):
                 prefix = os.path.join(self.args.data, '{}.{}-{}.'.format(split, src, pivot))
@@ -152,6 +152,7 @@ class UnsupervisedMultilingualTranslationTask(FairseqTask):
                 prefix = os.path.join(self.args.data, '{}.{}-{}.'.format(split, pivot, src))
             else:
                 continue
+            print(lang_pair,src, list(self.dicts.keys()))
             src_datasets[lang_pair] = indexed_dataset(prefix + src, self.dicts[src])
             print('| {} {} {} examples'.format(self.args.data, split, len(src_datasets[lang_pair])))
 
