@@ -79,6 +79,7 @@ def main(args):
     )
 
     # Load partial unsupervised mpdeñ
+    print("Load previous models for unsupervised training")
     load_partial_models_for_unsup_training(args, trainer)
 
     # Load the latest checkpoint if one is available
@@ -349,7 +350,10 @@ def load_partial_models_for_unsup_training(args, trainer):
     enc_checkpoint_path = os.path.join(args.prev_enc_model, args.restore_file)
     dec_checkpoint_path = os.path.join(args.prev_dec_model, args.restore_file)
     pivot_checkpoint_path = os.path.join(args.pivot_prev_model, args.restore_file)
-    if os.path.isfile(enc_checkpoint_path) and os.path.isfile(dec_checkpoint_path):
+    if os.path.isfile(enc_checkpoint_path) and os.path.isfile(dec_checkpoint_path) and os.path.isfile(pivot_checkpoint_path):
+        print('Encoder checkpoint', enc_checkpoint_path)
+        print('Decoder checkpoint', dec_checkpoint_path)
+        print('Pivot checkpoint', pivot_checkpoint_path)
         trainer.load_checkpoint_for_unsup_training(enc_checkpoint_path,
                                                    dec_checkpoint_path,
                                                    pivot_checkpoint_path,
@@ -359,6 +363,9 @@ def load_partial_models_for_unsup_training(args, trainer):
                                                    args.reset_lr_scheduler,
                                                    eval(args.optimizer_overrides))
         return True
+    else:
+        print('Missing checkpoint file')
+        exit(1)
     return False
 
 

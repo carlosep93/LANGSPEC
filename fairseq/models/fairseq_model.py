@@ -420,15 +420,16 @@ class FairseqMultiUnsupModel(BaseFairseqModel):
                                                        pivot_dicts[lang],
                                                        maxlen=maxlen)
                                                        for lang in self.pivot_keys}
-
+        print('MultiUnsup', self.keys, self.pivot_keys)
         self.models = nn.ModuleDict({
             key+'-'+pkey:FairseqUnsupModel(encoders[key],
                                   decoders[key],
                                   pivot_encoders[pkey],
                                   pivot_decoders[pkey],
                                   self.greedy_generators[pkey])
-            for key,pkey in zip(self.keys, self.pivot_keys)
+            for key in self.keys for pkey in self.pivot_keys
         })
+        print(list(self.models.keys()))
 
         self.keys = ['-'.join([k,p]) for k in self.keys for p in self.pivot_keys]
 
@@ -476,6 +477,7 @@ class FairseqMultiUnsupModel(BaseFairseqModel):
 
     def max_positions(self):
         """Maximum length supported by the model."""
+        print(self.keys, self.pivot_keys, list(self.models.keys()))
         return {
             key: (self.models[key].encoder.max_positions(), self.models[key].decoder.max_positions())
             for key in self.keys for pkey in self.pivot_keys
