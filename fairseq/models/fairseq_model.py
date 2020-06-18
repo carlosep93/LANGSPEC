@@ -369,26 +369,27 @@ class FairseqUnsupModel(BaseFairseqModel):
 
         encoder_out = self.encoder(src_tokens, src_lengths)
 
-        with torch.no_grad():
-            p_generated = self.generator.greedy_decode(self.encoder,
-                                                    [encoder_out],
-                                                    src_tokens,
-                                                    src_tokens.shape[0])
 
-            #Prepare generated data to be encoded
-            #Compute generated lengths until the end_of_sentence token is generated
-            p_srclens = torch.IntTensor([(g[0]['tokens']==2).nonzero()[0][0] +1  for g in p_generated])
+        p_generated = self.generator.greedy_decode(self.encoder,
+                                                [encoder_out],
+                                                src_tokens,
+                                                src_tokens.shape[0],
+                                                beam_size=1)
 
-            maxlen = max(p_srclens.data.tolist())
-            bsz = p_srclens.shape[0]
-            p_src_tokens = src_tokens.data.new(bsz,maxlen).fill_(self.pad_token)
-            for i,g in enumerate(p_generated):
-                length = g[0]['tokens'].size(0)
-                try:
-                    p_src_tokens[i,(maxlen-length):] = g[0]['tokens']
-                except:
-                    pass
-            p_encoder_out = self.generator.encode(self.pivot_encoder, p_src_tokens,p_srclens,bsz)
+        #Prepare generated data to be encoded
+        #Compute generated lengths until the end_of_sentence token is generated
+        p_srclens = torch.IntTensor([(g[0]['tokens']==2).nonzero()[0][0] +1  for g in p_generated])
+
+        maxlen = max(p_srclens.data.tolist())
+        bsz = p_srclens.shape[0]
+        p_src_tokens = src_tokens.data.new(bsz,maxlen).fill_(self.pad_token)
+        for i,g in enumerate(p_generated):
+            length = g[0]['tokens'].size(0)
+            try:
+                p_src_tokens[i,(maxlen-length):] = g[0]['tokens']
+            except:
+                pass
+        p_encoder_out = self.generator.encode(self.pivot_encoder, p_src_tokens,p_srclens,bsz)
 
         decoder_out = self.decoder(prev_output_tokens, p_encoder_out)
         return decoder_out
