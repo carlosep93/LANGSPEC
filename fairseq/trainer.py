@@ -155,10 +155,18 @@ class Trainer(object):
                 p.requires_grad = False
         return extra_state
 
-    def load_checkpoint_for_unsup_training(self,enc_filename,dec_filename, pivot_filename,keys,pivot_keys,new_keys, reset_optimizer=False, reset_lr_scheduler=False, optimizer_overrides=None, finetune=False,path=None):
+    def load_checkpoint_for_unsup_training(self,enc_filename,dec_filename, pivot_enc_filename, pivot_dec_filename, keys,pivot_keys,new_keys, reset_optimizer=False, reset_lr_scheduler=False, optimizer_overrides=None, finetune=False,path=None):
         """Load all training state from a checkpoint file."""
         extra_state, self._optim_history, last_optim_state = \
-            utils.load_partial_unsup_model_state(enc_filename,dec_filename,pivot_filename,self.get_model(),keys,pivot_keys, new_keys)
+            utils.load_partial_unsup_model_state(enc_filename,
+                                                dec_filename,
+                                                pivot_enc_filename,
+                                                pivot_dec_filename,
+                                                self.get_model(),
+                                                keys,
+                                                pivot_keys, 
+                                                new_keys)
+
         if last_optim_state is not None and not reset_optimizer:
             # rebuild optimizer after loading model, since params may have changed
             self._build_optimizer()
