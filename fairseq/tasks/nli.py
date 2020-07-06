@@ -45,9 +45,9 @@ class NliTask(FairseqTask):
     def add_args(parser):
         """Add task-specific arguments to the parser."""
         parser.add_argument('data', nargs='+', help='path(s) to data directorie(s)')
-        parser.add_argument('-r', '--ref-lang', default=None, metavar='REF',
+        parser.add_argument('--ref-lang', default=None, metavar='REF',
                             help='reference language')
-        parser.add_argument('-hl', '--hyp-lang', default=None, metavar='HYP',
+        parser.add_argument('--hyp-lang', default=None, metavar='HYP',
                             help='hypothesis language')
         parser.add_argument('--raw-text', action='store_true',
                             help='load raw text dataset')
@@ -63,17 +63,23 @@ class NliTask(FairseqTask):
                             help='max number of tokens in the hypothesis sequence')
         parser.add_argument('--upsample-primary', default=1, type=int,
                             help='amount to upsample primary dataset')
-        parser.add_argument('--enc-path', type=str,
-                            help='path to pretrained encoder file')
-        parser.add_argument('--enc-key', type=str,
-                            help='key (if any) of pretrained encoder')
+        parser.add_argument('--ref-enc-path', type=str,
+                            help='path to pretrained reference encoder file')
+        parser.add_argument('--ref-enc-key', type=str,
+                            help='key (if any) of pretrained reference encoder')
+        parser.add_argument('--hyp-enc-path', type=str,
+                            help='path to pretrained hypothesis encoder file')
+        parser.add_argument('--hyp-enc-key', type=str,
+                            help='key (if any) of pretrained hypothesis encoder')
 
     def __init__(self, args, ref_dict, hyp_dict):
         super().__init__(args)
         self.ref_dict = ref_dict
         self.hyp_dict = hyp_dict
-        self.enc_path= args.enc_path
-        self.enc_key = args.enc_key
+        self.ref_enc_path= args.ref_enc_path
+        self.ref_enc_key = args.ref_enc_key
+        self.hyp_enc_path= args.hyp_enc_path
+        self.hyp_enc_key = args.hyp_enc_key
 
     @classmethod
     def setup_task(cls, args, **kwargs):
@@ -162,11 +168,11 @@ class NliTask(FairseqTask):
         """Return the max sentence length allowed by the task."""
         return (self.args.max_ref_positions, self.args.max_hyp_positions)
 
-    def encoder_path(self):
-        return self.enc_path
+    def encoder_paths(self):
+        return self.ref_enc_path, self.hyp_enc_path
 
-    def encoder_key(self):
-        return self.enc_key
+    def encoder_keys(self):
+        return self.ref_enc_key, self.hyp_enc_key
 
     @property
     def ref_dictionary(self):

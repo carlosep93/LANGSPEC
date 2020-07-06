@@ -34,9 +34,10 @@ class NliClassifierLSTMModel(BaseFairseqModel):
     <https://arxiv.org/abs/1809.05053>
     """
 
-    def __init__(self, encoder, classifier):
+    def __init__(self, ref_encoder, hyp_encoder, classifier):
         super().__init__()
-        self.encoder = encoder
+        self.ref_encoder = ref_encoder
+        self.hyp_encoder = hyp_encoder
         self.classifier = classifier
 
     @staticmethod
@@ -112,20 +113,21 @@ class NliClassifierLSTMModel(BaseFairseqModel):
 
 
 
-        encoder = LSTMEncoder(ref_dict, args.encoder_embed_dim, args.encoder_embed_dim,args.encoder_layers)
+        ref_encoder = LSTMEncoder(ref_dict, args.encoder_embed_dim, args.encoder_embed_dim,args.encoder_layers)
+        hyp_encoder = LSTMEncoder(hyp_dict, args.encoder_embed_dim, args.encoder_embed_dim,args.encoder_layers)
         classifier = nn.Sequential(*[
             torch.nn.Dropout(args.class_dropout),
             torch.nn.Linear(args.encoder_embed_dim*4,args.class_hidden_size),
             torch.nn.Linear(args.class_hidden_size,3),
             torch.nn.LogSoftmax()
         ])
-        return NliClassifierLSTMModel(encoder, classifier)
+        return NliClassifierLSTMModel(ref_encoder, hyp_encoder, classifier)
 
     def forward(self, reference,ref_lengths,hypothesis,hyp_lengths,labels):
 
         # Sort the input and lengths as the descending order
-        self.encoder.eval()
-        self.encoder.embed_tokens.eval()
+        self.ref_encoder.eval()
+        self.hyp_encoder.eval()
 
         with torch.no_grad():
 
@@ -135,11 +137,11 @@ class NliClassifierLSTMModel(BaseFairseqModel):
             hyp_lengths, hyp_perm_index = hyp_lengths.sort(0, descending=True)
             hypothesis = hypothesis[hyp_perm_index]
 
-            encoder_ref_out = self.encoder(reference,ref_lengths)
-            encoder_hyp_out = self.encoder(hypothesis,hyp_lengths)
+            encoder_ref_out = self.ref_encoder(reference,ref_lengths)
+            encoder_hyp_out = self.hyp_encoder(hypothesis,hyp_lengths)
 
             #restore sorting
-            encoder_hyp_out =  self.encoder.reorder_encoder_out(encoder_hyp_out,hyp_perm_index)
+            encoder_hyp_out =  self.hyp_encoder.reorder_encoder_out(encoder_hyp_out,hyp_perm_index)
 
             encoder_ref_padding_mask = encoder_ref_out['encoder_padding_mask']
             encoder_hyp_padding_mask = encoder_hyp_out['encoder_padding_mask']

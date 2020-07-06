@@ -185,6 +185,22 @@ class Trainer(object):
                 if isinstance(meter, TimeMeter):
                     meter.reset()
 
+        # Freeze parameters from the pivot model
+        for key in self.model.models.keys():
+            enc_module =  self.model.models[key].pivot_encoder
+            dec_module =  self.model.models[key].pivot_decoder
+            enc_module.train(False)
+            dec_module.train(False)
+            for p in enc_module.parameters():
+                p.requires_grad = False
+            for p in dec_module.parameters():
+                p.requires_grad = False
+            '''
+            gen = self.model.models[key].generator
+            for dec in gen.decoders:
+                for p in dec.parameters():
+                    p.requires_grad = False
+            '''
         return extra_state
 
     def load_partial_checkpoint(self, filename,key,newkey, reuse,reset_optimizer=False, reset_lr_scheduler=False, optimizer_overrides=None, finetune=False,path=None):
@@ -240,11 +256,15 @@ class Trainer(object):
 
 
     def load_nli_encoder(self,task,model):
-        checkpoint = task.encoder_path()
-        key = task.encoder_key()
-        utils.get_nli_encoder(model,key,checkpoint)
-        model.encoder.train(False)
-        for p in self.model.encoder.parameters():
+        ref_checkpoint,hyp_checkpoint = task.encoder_paths()
+        ref_key,hyp_key = task.encoder_keys()
+        utils.get_nli_encoder(model,ref_key,ref_checkpoint,'ref_encoder')
+        utils.get_nli_encoder(model,hyp_key,hyp_checkpoint,'hyp_encoder')
+        model.ref_encoder.train(False)
+        model.hyp_encoder.train(False)
+        for p in self.model.ref_encoder.parameters():
+            p.requires_grad = False
+        for p in self.model.hyp_encoder.parameters():
             p.requires_grad = False
 
 

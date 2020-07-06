@@ -32,10 +32,10 @@ class NliClassifierModel(BaseFairseqModel):
     <https://arxiv.org/abs/1809.05053>
     """
 
-    def __init__(self,embeddings, encoder, classifier):
+    def __init__(self,ref_encoder, hyp_encoder, classifier):
         super().__init__()
-        self.embeddings = embeddings
-        self.encoder = encoder
+        self.ref_encoder = ref_encoder
+        self.hyp_encoder = hyp_encoder
         self.classifier = classifier
 
     @staticmethod
@@ -120,79 +120,70 @@ class NliClassifierModel(BaseFairseqModel):
                 utils.load_embedding(embed_dict, dictionary, emb)
             return emb
         
-        if args.share_all_embeddings:
-            if ref_dict != hyp_dict:
-                raise ValueError('--share-all-embeddings requires a joined dictionary')
-            if args.encoder_embed_dim != args.decoder_embed_dim:
-                raise ValueError(
-                    '--share-all-embeddings requires --encoder-embed-dim to match --decoder-embed-dim')
-            if args.decoder_embed_path and (
-                    args.decoder_embed_path != args.encoder_embed_path):
-                raise ValueError('--share-all-embeddings not compatible with --decoder-embed-path')
-            encoder_embed_tokens = build_embedding(
-                ref_dict, args.encoder_embed_dim, args.encoder_embed_path
-            )
-            args.share_decoder_input_output_embed = True
-        else:
-            encoder_embed_tokens = build_embedding(
-                ref_dict, args.encoder_embed_dim, args.encoder_embed_path
-            )
+
+        ref_encoder_embed_tokens = build_embedding(
+            ref_dict, args.encoder_embed_dim, args.encoder_embed_path
+        )
+        hyp_encoder_embed_tokens = build_embedding(
+            hyp_dict, args.encoder_embed_dim, args.encoder_embed_path
+        )
         
-        
-        encoder = TransformerEncoder(args, ref_dict, encoder_embed_tokens)
+        ref_encoder = TransformerEncoder(args, ref_dict, ref_encoder_embed_tokens)
+        hyp_encoder = TransformerEncoder(args, ref_dict, hyp_encoder_embed_tokens)
         classifier = nn.Sequential(*[
             torch.nn.Dropout(args.class_dropout),
-            torch.nn.Linear(args.encoder_embed_dim*2,args.class_hidden_size),
+            torch.nn.Linear(args.encoder_embed_dim*4,args.class_hidden_size),
             torch.nn.Linear(args.class_hidden_size,3),
-            torch.nn.LogSoftmax()
         ])
-        return NliClassifierModel(encoder_embed_tokens,encoder, classifier)
+        return NliClassifierModel(ref_encoder, hyp_encoder, classifier)
 
     def forward(self, reference,ref_lengths,hypothesis,hyp_lengths,labels):
-        self.encoder.eval()
-        self.embeddings.eval()
-        with torch.no_grad():
+        self.ref_encoder.eval()
+        self.hyp_encoder.eval()
+        #self.embeddings.eval()
+        #with torch.no_grad():
 
-            print(reference.data.tolist())
+        #print(reference.data.tolist())
 
-            encoder_ref_out = self.encoder(reference,ref_lengths)
-            encoder_hyp_out = self.encoder(hypothesis,hyp_lengths)
+        encoder_ref_out = self.ref_encoder(reference,ref_lengths)
+        encoder_hyp_out = self.hyp_encoder(hypothesis,hyp_lengths)
 
-            encoder_ref_padding_mask = encoder_ref_out['encoder_padding_mask']
-            encoder_hyp_padding_mask = encoder_hyp_out['encoder_padding_mask']
+        encoder_ref_padding_mask = encoder_ref_out['encoder_padding_mask']
+        encoder_hyp_padding_mask = encoder_hyp_out['encoder_padding_mask']
 
-            encoder_ref_out = encoder_ref_out['encoder_out']
-            encoder_hyp_out = encoder_hyp_out['encoder_out']
-            
+        encoder_ref_out = encoder_ref_out['encoder_out']
+        encoder_hyp_out = encoder_hyp_out['encoder_out']
 
-            #apply masking
-            if not encoder_ref_padding_mask is None:
-                encoder_ref_padding_mask = encoder_ref_padding_mask.t().unsqueeze(-1).repeat(1,1,encoder_ref_out.shape[-1])
-                encoder_ref_out = encoder_ref_out.float().masked_fill(
-                        encoder_ref_padding_mask,
-                        float('-inf'),
-                    ).type_as(encoder_ref_out)
 
-            if not encoder_hyp_padding_mask is None:
-                encoder_hyp_padding_mask = encoder_hyp_padding_mask.t().unsqueeze(-1).repeat(1,1,encoder_hyp_out.shape[-1])
-                encoder_hyp_out = encoder_hyp_out.float().masked_fill(
-                        encoder_hyp_padding_mask,
-                        float('-inf'),
-                    ).type_as(encoder_hyp_out)
+        #apply masking
+        '''
+        if not encoder_ref_padding_mask is None:
+            encoder_ref_padding_mask = encoder_ref_padding_mask.t().unsqueeze(-1).repeat(1,1,encoder_ref_out.shape[-1])
+            encoder_ref_out = encoder_ref_out.float().masked_fill(
+                    encoder_ref_padding_mask,
+                    float('-inf'),
+                ).type_as(encoder_ref_out)
 
-        
-            #encoder_ref_out = torch.max(encoder_ref_out.permute(1,0,2),1).values
-            #encoder_hyp_out = torch.max(encoder_hyp_out.permute(1,0,2),1).values
+        if not encoder_hyp_padding_mask is None:
+            encoder_hyp_padding_mask = encoder_hyp_padding_mask.t().unsqueeze(-1).repeat(1,1,encoder_hyp_out.shape[-1])
+            encoder_hyp_out = encoder_hyp_out.float().masked_fill(
+                    encoder_hyp_padding_mask,
+                    float('-inf'),
+                ).type_as(encoder_hyp_out)
+        '''
 
-            encoder_ref_out = encoder_ref_out.permute(1,0,2).mean(dim=1)
-            encoder_hyp_out = encoder_hyp_out.permute(1,0,2).mean(dim=1)
+        #encoder_ref_out = torch.max(encoder_ref_out.permute(1,0,2),1).values
+        #encoder_hyp_out = torch.max(encoder_hyp_out.permute(1,0,2),1).values
+
+        encoder_ref_out = encoder_ref_out.permute(1,0,2).mean(dim=1)
+        encoder_hyp_out = encoder_hyp_out.permute(1,0,2).mean(dim=1)
 
         #CHECK IF THE RESULT IS TRANSPOSED
-        #elem_wise_mul = torch.mul(encoder_ref_out,encoder_hyp_out)
-        #abs_dif = torch.abs(encoder_ref_out - encoder_hyp_out)
+        elem_wise_mul = torch.mul(encoder_ref_out,encoder_hyp_out)
+        abs_dif = torch.abs(encoder_ref_out - encoder_hyp_out)
         out = torch.cat((encoder_ref_out,encoder_hyp_out),1)
-        #out = torch.cat((out,abs_dif),1)
-        #out = torch.cat((out,elem_wise_mul),1)
+        out = torch.cat((out,abs_dif),1)
+        out = torch.cat((out,elem_wise_mul),1)
         out = self.classifier(out)
 
         return out

@@ -107,14 +107,14 @@ def load_pretrained_embeddings(path):
         return weights
 
 
-def get_nli_encoder(model,key,filename):
+def get_nli_encoder(model,key,filename,tag):
     state = torch.load(filename, map_location=lambda s, l: default_restore_location(s, 'cpu'))
     current_state = model.state_dict()
     if not key is None:
-        state['model'] = OrderedDict({k:v for k,v in state['model'].items() if '.'.join(['models',key,'encoder']) in k})
+        state['model'] = OrderedDict({k.replace('encoder',tag):v for k,v in state['model'].items() if '.'.join(['models',key,'encoder']) in k})
         state['model'] = OrderedDict({k.replace('models.' + key + '.',''):v for k,v in state['model'].items()})
     else:
-        state['model'] = OrderedDict({k:v for k,v in state['model'].items() if 'encoder.' in k})
+        state['model'] = OrderedDict({k.replace('encoder',tag):v for k,v in state['model'].items() if 'encoder.' in k})
     for k,v in state['model'].items():
         current_state[k] = v
     model.load_state_dict(current_state)
@@ -286,33 +286,42 @@ def load_partial_model_for_inference(enc_filename,enc_key, dec_filename, dec_key
     model = task.build_model(args)
     model.upgrade_state_dict(state)
 
-
     try:
         model.load_state_dict(state, strict=False)
     except Exception:
         raise Exception('Cannot load model parameters from checkpoint, '
                         'please ensure that the architectures match')
 
-
     model.eval()
 
     return [model],args
 
 
+def get_nli_encoder_state(task,enc_path,enc_key,tag):
+    #load encoder state from previous model
+    enc_state = torch.load(enc_path, map_location=lambda s, l: default_restore_location(s, 'cpu'))
+    print("ENC KEY:", enc_key)
+    if not enc_key is None:
+        enc_state['model'] = OrderedDict({k.replace('encoder',tag):v for k,v in enc_state['model'].items() if '.'.join(['models',enc_key,'encoder']) in k})
+        enc_state['model'] = OrderedDict({k.replace('models.' + enc_key + '.',''):v for k,v in enc_state['model'].items()})
+    else:
+        enc_state['model'] = OrderedDict({k.replace('encoder',tag):v for k,v in enc_state['model'].items() if 'encoder.' in k})
+    return enc_state
+
 def load_nli_model_for_inference(path,task, model_arg_overrides=None,pair=None):
+
+    ref_enc_path, hyp_enc_path = task.encoder_paths()
+    ref_enc_key, hyp_enc_key = task.encoder_keys()
+
     if not os.path.exists(path):
             raise IOError('Model file not found: {}'.format(path))
-    if not os.path.exists(task.enc_path):
-        raise IOError('Model file not found: {}'.format(task.enc_path))
+    if not os.path.exists(ref_enc_path):
+        raise IOError('Model file not found: {}'.format(ref_enc_path))
+    if not os.path.exists(hyp_enc_path):
+        raise IOError('Model file not found: {}'.format(hyp_enc_path))
 
-    #load encoder state from previous model
-    enc_state = torch.load(task.enc_path, map_location=lambda s, l: default_restore_location(s, 'cpu'))
-    print("ENC KEY:", task.enc_key)
-    if not task.enc_key is None:
-        enc_state['model'] = OrderedDict({k:v for k,v in enc_state['model'].items() if '.'.join(['models',task.enc_key,'encoder']) in k})
-        enc_state['model'] = OrderedDict({k.replace('models.' + task.enc_key + '.',''):v for k,v in enc_state['model'].items()})
-    else:
-        enc_state['model'] = OrderedDict({k:v for k,v in enc_state['model'].items() if 'encoder.' in k})
+    ref_enc_state = get_nli_encoder_state(task,ref_enc_path,ref_enc_key,'ref_encoder')
+    hyp_enc_state = get_nli_encoder_state(task,hyp_enc_path,hyp_enc_key,'hyp_encoder')
 
     #Load classifier weights
     state = torch.load(path, map_location=lambda s, l: default_restore_location(s, 'cpu'))
@@ -320,17 +329,16 @@ def load_nli_model_for_inference(path,task, model_arg_overrides=None,pair=None):
     state['model'] = OrderedDict({k:v for k,v in state['model'].items() if 'classifier' in k})
 
     #Join models
-    state['model'].update(enc_state['model'])
+    state['model'].update(ref_enc_state['model'])
+    state['model'].update(hyp_enc_state['model'])
 
     state = _upgrade_state_dict(state)
     args = state['args']
 
     model = task.build_model(args)
+    model.load_state_dict(state['model'], strict=True)
     model.upgrade_state_dict(state['model'])
-    model.load_state_dict(state['model'], strict=False)
 
-
-    model.eval()
     return model
 
 def load_ensemble_for_inference(filenames, task, model_arg_overrides=None,pair=None):

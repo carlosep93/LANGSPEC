@@ -43,24 +43,26 @@ def main(args):
     print('| loading model(s) from {}'.format(args.path))
     model = utils.load_nli_model_for_inference(args.path, task, model_arg_overrides=eval(args.model_overrides))
 
+    '''
     model.make_generation_fast_(
             beamable_mm_beam_size=none if args.no_beamable_mm else args.beam,
             need_attn=args.print_alignment,
         )
     if args.fp16:
         model.half()
+    '''
 
-
+    max_positions = utils.resolve_max_positions(
+            task.max_positions(),
+            *[model.max_positions()]
+        )
 
     # Load dataset (possibly sharded)
     itr = task.get_batch_iterator(
         dataset=task.dataset(args.gen_subset),
         max_tokens=args.max_tokens,
         max_sentences=args.max_sentences,
-        max_positions=utils.resolve_max_positions(
-            task.max_positions(),
-            *[model.max_positions()]
-        ),
+        max_positions=max_positions,
         ignore_invalid_inputs=args.skip_invalid_size_inputs_valid_test,
         required_batch_size_multiple=8,
         num_shards=args.num_shards,
@@ -81,14 +83,13 @@ def main(args):
                 if use_cuda:
                     net_input = {k:v.cuda() for k,v in net_input.items()}
                 net_output = model(**net_input)
-                #probs =  softmax(net_output.cpu().tolist()).tolist()
-                probs = net_output.cpu().tolist()
-                preds = preds + probs
-                labels = labels + net_input['labels'].cpu().tolist()
+                probs =  softmax(net_output.cpu().tolist()).tolist()
+                preds +=  probs
+                labels += net_input['labels'].clone().detach().tolist()
 
     #Compute accuracy
+    print(len(preds),len(labels))
     preds = [np.argmax(p) for p in preds]
-    #labels = [l.index(max(l)) for l in labels]
     r = [1.0 if p == l else 0 for p,l in zip(preds,labels)]
     acc = sum(r)/len(r)
     print('Accuracy', acc)
