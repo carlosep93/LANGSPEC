@@ -12,12 +12,13 @@ from fairseq import utils
 from . import FairseqCriterion, register_criterion
 
 
-@register_criterion('label_smoothed_cross_entropy')
-class LabelSmoothedCrossEntropyCriterion(FairseqCriterion):
+@register_criterion('unsup_label_smoothed_cross_entropy')
+class UnsupLabelSmoothedCrossEntropyCriterion(FairseqCriterion):
 
     def __init__(self, args, task):
         super().__init__(args, task)
         self.eps = args.label_smoothing
+        self.lamb = args.lamb
 
     @staticmethod
     def add_args(parser):
@@ -25,7 +26,7 @@ class LabelSmoothedCrossEntropyCriterion(FairseqCriterion):
         parser.add_argument('--label-smoothing', default=0., type=float, metavar='D',
                             help='epsilon for label smoothing, 0 means no label smoothing')
 
-    def forward(self, model, sample, reduce=True):
+    def forward(self, model, sample, reduce=True,recons=False):
         """Compute the loss for the given sample.
 
         Returns a tuple with three elements:
@@ -33,8 +34,11 @@ class LabelSmoothedCrossEntropyCriterion(FairseqCriterion):
         2) the sample size, which is used as the denominator for the gradient
         3) logging outputs to display while training
         """
-        net_output = model(**sample['net_input'])
+        net_output = model(**sample['net_input'])[1] if  recons else model(**sample['net_input'])[0]
+        #loss_tr, nll_loss_tr = self.compute_loss(model, net_output[0], sample, reduce=reduce)
         loss, nll_loss = self.compute_loss(model, net_output, sample, reduce=reduce)
+        #loss = loss_tr + (self.lamb * loss_tr)
+        #nll_loss = nll_loss_tr +  (self.lamb * nll_loss_rc)
         sample_size = sample['target'].size(0) if self.args.sentence_avg else sample['ntokens']
         logging_output = {
             'loss': utils.item(loss.data) if reduce else loss.data,
