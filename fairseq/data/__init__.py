@@ -16,7 +16,7 @@ from .audio_pair_dataset import AudioPairDataset
 from .monolingual_dataset import MonolingualDataset
 from .round_robin_zip_datasets import RoundRobinZipDatasets,ParallelRoundRobinZipDatasets
 from .token_block_dataset import TokenBlockDataset
-from .speech_dataset import  SpeechDataset
+#from .speech_dataset import  SpeechDataset
 from .speech_pair_dataset import  SpeechPairDataset
 from .nli_dataset import NliDataset
 from .audio_reader import get_reader
@@ -46,7 +46,6 @@ __all__ = [
     'RoundRobinZipDatasets',
     'ShardedIterator',
     'TokenBlockDataset',
-    'SpeechDataset',
     'SpeechPairDataset',
     'NliDataset',
     'get_reader'

@@ -262,7 +262,7 @@ class AudioPairDataset(FairseqDataset):
         )
 
 
-class LanguagePairTokenDataset(LanguagePairDataset):
+class LanguagePairTokenDataset(AudioPairDataset):
     def __init__(
         self, src, src_sizes, src_dict,
         tgt=None, tgt_sizes=None, tgt_dict=None,

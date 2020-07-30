@@ -21,8 +21,8 @@ from fairseq.models.fairseq_model import FairseqInterlinguaModel
 from . import FairseqTask, register_task
 
 
-@register_task('interlingua_nodistance_translation')
-class InterlinguaNoDistanceTranslationTask(FairseqTask):
+@register_task('speech_interlingua_translation')
+class SpeechInterlinguaTranslationTask(FairseqTask):
     """A task for training multiple translation models simultaneously.
 
     We iterate round-robin over batches from multiple language pairs, ordered
