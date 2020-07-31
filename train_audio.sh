@@ -25,4 +25,6 @@ CUDA_VISIBLE_DEVICES=0 python train.py $DEST_DIR  \
     --sentence-avg \
     --distance-penalty log \
     --criterion label_smoothed_cross_entropy \
+    --lang-pairs ens-en \
+    --freeze-schedule n-n \
     --label-smoothing 0.1

@@ -23,13 +23,14 @@ from fairseq.modules import (
 
 from . import (
     FairseqIncrementalDecoder, FairseqEncoder, FairseqLanguageModel, FairseqModel, register_model,
-    register_model_architecture,
+    register_model_architecture
 )
+from fairseq.models.fairseq_model import FairseqInterlinguaModel
 import torch.utils.checkpoint as cp
 
 
 @register_model('speechconvtransformer')
-class TransformerModel(FairseqModel):
+class TransformerModel(FairseqInterlinguaModel):
     def __init__(self, encoder, decoder):
         super().__init__(encoder, decoder)
 

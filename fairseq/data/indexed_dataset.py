@@ -53,6 +53,67 @@ def data_file_path(prefix_path):
 class IndexedDataset(torch.utils.data.Dataset):
     """Loader for TorchNet IndexedDataset"""
 
+    def __init__(self, path, fix_lua_indexing=False, read_data=True, audio=False):
+        super().__init__()
+        self.fix_lua_indexing = fix_lua_indexing
+        self.read_index(path)
+        self.data_file = None
+        self.audio = audio
+        if read_data:
+            self.read_data(path)
+
+    def read_index(self, path):
+        with open(index_file_path(path), 'rb') as f:
+            magic = f.read(8)
+            assert magic == b'TNTIDX\x00\x00'
+            version = f.read(8)
+            assert struct.unpack('<Q', version) == (1,)
+            code, self.element_size = struct.unpack('<QQ', f.read(16))
+            self.dtype = dtypes[code]
+            self.size, self.s = struct.unpack('<QQ', f.read(16))
+            self.dim_offsets = read_longs(f, self.size + 1)
+            self.data_offsets = read_longs(f, self.size + 1)
+            self.sizes = read_longs(f, self.s)
+
+    def read_data(self, path):
+        self.data_file = open(data_file_path(path), 'rb', buffering=0)
+
+    def check_index(self, i):
+        if i < 0 or i >= self.size:
+            raise IndexError('index out of range')
+
+    def __del__(self):
+        if self.data_file:
+            self.data_file.close()
+
+    def __getitem__(self, i):
+        self.check_index(i)
+        tensor_size = self.sizes[self.dim_offsets[i]:self.dim_offsets[i + 1]]
+        a = np.empty(tensor_size, dtype=self.dtype)
+        self.data_file.seek(self.data_offsets[i] * self.element_size)
+        self.data_file.readinto(a)
+        item = torch.from_numpy(a)
+        if not self.audio:
+            item = item.long()
+        if self.fix_lua_indexing:
+            item -= 1  # subtract 1 for 0-based indexing
+        return item
+
+    def __len__(self):
+        return self.size
+
+    @staticmethod
+    def exists(path):
+        return (
+            os.path.exists(index_file_path(path)) and
+            os.path.exists(data_file_path(path))
+        )
+
+
+'''
+class IndexedDataset(torch.utils.data.Dataset):
+    """Loader for TorchNet IndexedDataset"""
+
     def __init__(self, path, fix_lua_indexing=False, read_data=True):
         super().__init__()
         self.fix_lua_indexing = fix_lua_indexing
@@ -106,7 +167,7 @@ class IndexedDataset(torch.utils.data.Dataset):
             os.path.exists(data_file_path(path))
         )
 
-'''
+
 class IndexedCachedDataset(IndexedDataset):
 
     def __init__(self, path, fix_lua_indexing=False):
@@ -126,7 +187,7 @@ class IndexedCachedDataset(IndexedDataset):
         for i in indices:
             total_size += self.data_offsets[i + 1] - self.data_offsets[i]
         self.cache = np.empty(total_size, dtype=self.dtype)
-        ptx = 0
+        ptx = 0q
         self.cache_index.clear()
         for i in indices:
             self.cache_index[i] = ptx
@@ -153,6 +214,7 @@ class IndexedInMemoryDataset(IndexedDataset):
 
     def read_data(self, path):
         self.data_file = open(data_file_path(path), 'rb')
+        print("self.data_offsets", self.data_offsets)
         self.buffer = np.empty(self.data_offsets[-1], dtype=self.dtype)
         self.data_file.readinto(self.buffer)
         self.data_file.close()

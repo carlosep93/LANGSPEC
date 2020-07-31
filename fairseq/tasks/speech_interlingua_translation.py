@@ -138,8 +138,8 @@ class SpeechInterlinguaTranslationTask(FairseqTask):
         def indexed_dataset(path, dictionary, cached=True, audio=False):
             if self.args.raw_text:
                 return IndexedRawTextDataset(path, dictionary)
-            elif IndexedInMemoryDataset.exists(path):
-                return IndexedInMemoryDataset(path, fix_lua_indexing=True)
+            #elif IndexedInMemoryDataset.exists(path):
+            #       return IndexedInMemoryDataset(path, fix_lua_indexing=True)
             elif IndexedDataset.exists(path):
                 if cached:
                     return IndexedCachedDataset(path, fix_lua_indexing=True, audio=audio)
@@ -171,6 +171,7 @@ class SpeechInterlinguaTranslationTask(FairseqTask):
             src, tgt = lang_pair.split('-')
             if lang_pair in src_datasets:
                 src_dataset, tgt_dataset = src_datasets[lang_pair], tgt_datasets[lang_pair]
+
             else:
                 lang_pair = sort_lang_pair(lang_pair)
                 tgt_dataset, src_dataset = src_datasets[lang_pair], tgt_datasets[lang_pair]
@@ -184,6 +185,7 @@ class SpeechInterlinguaTranslationTask(FairseqTask):
                 src_audio=self.args.audio_input
             )
 
+
         self.datasets[split] = RoundRobinZipDatasets(
             OrderedDict([
                 (lang_pair, language_pair_dataset(lang_pair))
@@ -191,6 +193,14 @@ class SpeechInterlinguaTranslationTask(FairseqTask):
             ]),
             eval_key=None if self.training else self.args.lang_pairs[0],
         )
+
+        if self.args.audio_input:
+            # saving audio features length, needed when creating the model.
+            print("Dataset keys", self.datasets[split].datasets.keys())
+            src_dataset = self.datasets[split].datasets[self.args.lang_pairs[0]].src
+            self.audio_features = src_dataset.sizes[1]
+            for lang_pair in self.args.lang_pairs:
+                self.datasets[split].datasets[lang_pair].src_dict.audio_feautures = self.audio_features
 
         print('**************************')
         print(self.args.lang_pairs)

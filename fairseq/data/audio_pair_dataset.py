@@ -246,6 +246,7 @@ class AudioPairDataset(FairseqDataset):
             indices = np.arange(len(self))
         if self.tgt_sizes is not None:
             indices = indices[np.argsort(self.tgt_sizes[indices], kind='mergesort')]
+        print("INDICES", len(indices), "SRC_SIZES", len(self.src_sizes))
         return indices[np.argsort(self.src_sizes[indices], kind='mergesort')]
 
     def prefetch(self, indices):

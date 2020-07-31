@@ -42,9 +42,11 @@ class RoundRobinZipDatasets(FairseqDataset):
         ])
 
     def _map_index(self, key, index):
+        print('Key', key, 'Index', index)
         return self._ordered_indices[key][index % len(self.datasets[key])]
 
     def __getitem__(self, index):
+        print('Index', index)
         if self.eval_key is None:
             return OrderedDict([
                 (key, dataset[self._map_index(key, index)])
