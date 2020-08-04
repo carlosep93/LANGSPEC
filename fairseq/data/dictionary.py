@@ -301,7 +301,7 @@ class AudioDictionary(object):
             print('{} {}'.format(symbol, count), file=f)
 
     def dummy_sentence(self, length):
-        t = torch.Tensor(length).new_empty((length, self.audio_features)).uniform_(self.nspecial + 1, len(self))
+        t = torch.Tensor(length).new_empty((length, self.audio_features)).uniform_(0, 1)
         return t
 
     def string(self, tensor, bpe_symbol=None, escape_unk=False):

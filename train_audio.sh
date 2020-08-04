@@ -16,10 +16,10 @@ CUDA_VISIBLE_DEVICES=0 python train.py $DEST_DIR  \
     --lr-schedule inverse_sqrt \
     --warmup-updates 4000 --warmup-init-lr 3e-4 \
     --optimizer adam \
-    --arch speechconvtransformer_big \
+    --arch speech_interlingua_transformer_big \
     --task speech_interlingua_translation  \
     --audio-input \
-    --max-source-positions 1400 --max-target-positions 300 \
+    --max-source-positions 2000 --max-target-positions 300 \
     --update-freq 64 \
     --skip-invalid-size-inputs-valid-test \
     --sentence-avg \
@@ -27,4 +27,5 @@ CUDA_VISIBLE_DEVICES=0 python train.py $DEST_DIR  \
     --criterion label_smoothed_cross_entropy \
     --lang-pairs ens-en \
     --freeze-schedule n-n \
-    --label-smoothing 0.1
+    --label-smoothing 0.1 \
+    --no-cache-source

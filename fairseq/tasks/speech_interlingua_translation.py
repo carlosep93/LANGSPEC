@@ -71,6 +71,8 @@ class SpeechInterlinguaTranslationTask(FairseqTask):
                             help='use autoencoders during training')
         parser.add_argument('--adapt-schedule', default='False', type=str, metavar='BOOL',
                             help='adapt freezing schedule after each epoch')
+        parser.add_argument('--audio-features', default=256, type=int, metavar='N',
+                            help='number of audio features by sampling')
         parser.add_argument('--no-cache-source', default=False, action='store_true')
         parser.add_argument('--audio-input', action='store_true',
                             help='load audio input dataset')
@@ -135,7 +137,7 @@ class SpeechInterlinguaTranslationTask(FairseqTask):
                 return True
             return False
 
-        def indexed_dataset(path, dictionary, cached=True, audio=False):
+        def indexed_dataset(path, dictionary, cached=True, audio=False, audio_features=256):
             if self.args.raw_text:
                 return IndexedRawTextDataset(path, dictionary)
             #elif IndexedInMemoryDataset.exists(path):
@@ -144,14 +146,14 @@ class SpeechInterlinguaTranslationTask(FairseqTask):
                 if cached:
                     return IndexedCachedDataset(path, fix_lua_indexing=True, audio=audio)
                 else:
-                    return IndexedDataset(path, fix_lua_indexing=True, audio=audio)
+                    return IndexedDataset(path, fix_lua_indexing=True, audio=audio,audio_features=audio_features)
             return None
 
         def sort_lang_pair(lang_pair):
             return '-'.join(sorted(lang_pair.split('-')))
 
         src_datasets, tgt_datasets = {}, {}
-        for lang_pair in set(map(sort_lang_pair, self.args.lang_pairs)):
+        for lang_pair in set(self.args.lang_pairs):
             src, tgt = lang_pair.split('-')
             if split_exists(split, src, tgt, src):
                 prefix = os.path.join(self.args.data, '{}.{}-{}.'.format(split, src, tgt))
@@ -160,8 +162,15 @@ class SpeechInterlinguaTranslationTask(FairseqTask):
             else:
                 continue
             cached = not self.args.no_cache_source
-            src_datasets[lang_pair] = indexed_dataset(prefix + src, self.dicts[src], cached=cached, audio=True)
-            tgt_datasets[lang_pair] = indexed_dataset(prefix + tgt, self.dicts[tgt])
+
+            src_datasets[lang_pair] = indexed_dataset(prefix + src, \
+                                                    self.dicts[src], \
+                                                    cached=cached, \
+                                                    audio=True, \
+                                                    audio_features=self.args.audio_features)
+
+            tgt_datasets[lang_pair] = indexed_dataset(prefix + tgt, self.dicts[tgt],audio=False,cached=cached)
+
             print('| {} {} {} examples'.format(self.args.data, split, len(src_datasets[lang_pair])))
 
         if len(src_datasets) == 0:
@@ -196,7 +205,6 @@ class SpeechInterlinguaTranslationTask(FairseqTask):
 
         if self.args.audio_input:
             # saving audio features length, needed when creating the model.
-            print("Dataset keys", self.datasets[split].datasets.keys())
             src_dataset = self.datasets[split].datasets[self.args.lang_pairs[0]].src
             self.audio_features = src_dataset.sizes[1]
             for lang_pair in self.args.lang_pairs:
@@ -218,6 +226,7 @@ class SpeechInterlinguaTranslationTask(FairseqTask):
     def build_model(self, args):
         from fairseq import models
         model = models.build_model(args, self)
+        print('Model type', type(model))
         if not isinstance(model, FairseqInterlinguaModel):
             raise ValueError('InterlinguaNoDistanceTranslationTask requires a FairseqInterlinguaModel architecture')
         return model

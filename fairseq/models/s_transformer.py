@@ -30,7 +30,7 @@ import torch.utils.checkpoint as cp
 
 
 @register_model('speechconvtransformer')
-class TransformerModel(FairseqInterlinguaModel):
+class SpeechTransformerModel(FairseqInterlinguaModel):
     def __init__(self, encoder, decoder):
         super().__init__(encoder, decoder)
 
@@ -118,19 +118,18 @@ class TransformerModel(FairseqInterlinguaModel):
         decoder_embed_tokens = build_embedding(
                 tgt_dict, args.decoder_embed_dim, args.decoder_embed_path
             )
-
-        encoder = TransformerEncoder(args,
+        encoder = SpeechTransformerEncoder(args,
                 tgt_dict,
                 audio_features=task.audio_features,
             )
-        decoder = TransformerDecoder(args,
+        decoder = SpeechTransformerDecoder(args,
                 tgt_dict,
                 decoder_embed_tokens,
             )
         return TransformerModel(encoder, decoder)
 
 
-class TransformerEncoder(FairseqEncoder):
+class SpeechTransformerEncoder(FairseqEncoder):
     """Transformer encoder."""
     def __init__(self, args, dictionary, left_pad=True, convolutions=((512, 3),) * 20, stride=2,
                  audio_features=40):
@@ -264,7 +263,7 @@ class TransformerEncoder(FairseqEncoder):
         return state_dict
 
 
-class TransformerDecoder(FairseqIncrementalDecoder):
+class SpeechTransformerDecoder(FairseqIncrementalDecoder):
     """
     Transformer decoder consisting of *args.decoder_layers* layers. Each layer
     is a :class:`TransformerDecoderLayer`.
@@ -789,7 +788,7 @@ def speechtransformer_fbk(args):
     args.encoder_embed_dim = getattr(args, 'encoder_embed_dim', 512)
     args.encoder_convolutions = getattr(args, 'encoder_convolutions', '[(64, 3, 3)] * 2')
     args.encoder_layers = getattr(args, 'encoder_layers', 6)
-    args.encoder_ffn_embed_dim = getattr(args, 'encoder_ffn_embed_dim', 2048)
+    args.encoder_ffn_embed_dim = getattr(args, 'encoder_ffn_embed_dim', 1024)
     args.encoder_attention_heads = getattr(args, 'encoder_attention_heads', 8)
     args.encoder_learned_pos = getattr(args, 'encoder_learned_pos', False)
     args.encoder_normalize_before = getattr(args, 'encoder_normalize_before', True)

@@ -42,11 +42,9 @@ class RoundRobinZipDatasets(FairseqDataset):
         ])
 
     def _map_index(self, key, index):
-        print('Key', key, 'Index', index)
         return self._ordered_indices[key][index % len(self.datasets[key])]
 
     def __getitem__(self, index):
-        print('Index', index)
         if self.eval_key is None:
             return OrderedDict([
                 (key, dataset[self._map_index(key, index)])
@@ -110,7 +108,7 @@ class RoundRobinZipDatasets(FairseqDataset):
             for key, dataset in self.datasets.items()
         )
 
-
+    
 class ParallelRoundRobinZipDatasets(FairseqDataset):
     """Zip multiple FairseqDatasets together, repeating shorter datasets in a
     round-robin fashion to match the length of the longest one.

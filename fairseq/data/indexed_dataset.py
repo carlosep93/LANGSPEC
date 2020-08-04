@@ -53,12 +53,13 @@ def data_file_path(prefix_path):
 class IndexedDataset(torch.utils.data.Dataset):
     """Loader for TorchNet IndexedDataset"""
 
-    def __init__(self, path, fix_lua_indexing=False, read_data=True, audio=False):
+    def __init__(self, path, fix_lua_indexing=False, read_data=True, audio=False, audio_features=256):
         super().__init__()
         self.fix_lua_indexing = fix_lua_indexing
         self.read_index(path)
         self.data_file = None
         self.audio = audio
+        self.audio_features = audio_features
         if read_data:
             self.read_data(path)
 
@@ -371,12 +372,19 @@ class IndexedCachedDataset(IndexedDataset):
             self.data_file.readinto(a)
             ptx += size
 
+    def fetch(self, index):    
+        size = self.data_offsets[index+1] - self.data_offsets[index]
+        data = np.empty(size, dtype=self.dtype)
+        self.data_file.seek(self.data_offsets[index] * self.element_size)
+        self.data_file.readinto(data)
+        return data
+
     def __getitem__(self, i):
         self.check_index(i)
         tensor_size = self.sizes[self.dim_offsets[i]:self.dim_offsets[i + 1]]
-        a = np.empty(tensor_size, dtype=self.dtype)
-        ptx = self.cache_index[i]
-        np.copyto(a, self.cache[ptx: ptx + a.size].reshape(tensor_size))
+        data = np.empty(tensor_size, dtype=self.dtype)
+        a = self.fetch(i)
+        np.copyto(data, a.reshape(tensor_size))
         item = torch.from_numpy(a)
         if not self.audio:
             item = item.long()

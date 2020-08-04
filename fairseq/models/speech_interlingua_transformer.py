@@ -16,9 +16,9 @@ from fairseq.models.fairseq_model import FairseqInterlinguaModel
 from .s_transformer import (
     base_architecture,
     Embedding,
-    TransformerModel,
-    TransformerEncoder,
-    TransformerDecoder,
+    SpeechTransformerModel,
+    SpeechTransformerEncoder,
+    SpeechTransformerDecoder,
 )
 
 
@@ -45,7 +45,7 @@ class InterlinguaTransformerModel(FairseqInterlinguaModel):
     @staticmethod
     def add_args(parser):
         """Add model-specific arguments to the parser."""
-        TransformerModel.add_args(parser)
+        SpeechTransformerModel.add_args(parser)
         parser.add_argument('--share-encoder-embeddings', action='store_true',
                             help='share encoder embeddings across languages')
         parser.add_argument('--share-decoder-embeddings', action='store_true',
@@ -144,9 +144,10 @@ class InterlinguaTransformerModel(FairseqInterlinguaModel):
                     if args.tie_lang_embeddings:
                         lang_embeddings[lang] = encoder_embed_tokens
                 pos = sorted(src_langs).index(lang)
-                lang_encoders[lang] = TransformerEncoder(args, task.dicts[lang], encoder_embed_tokens).to('cuda:' + str(pos)) \
+                print("TASK AUDIO FEATURES", task.audio_features)
+                lang_encoders[lang] =SpeechTransformerEncoder(args, task.dicts[lang], encoder_embed_tokens,audio_features=task.audio_features).to('cuda:' + str(pos)) \
                                         if torch.cuda.device_count() > 1 else \
-                                        TransformerEncoder(args, task.dicts[lang], encoder_embed_tokens)
+                                        SpeechTransformerEncoder(args, task.dicts[lang], encoder_embed_tokens,audio_features=task.audio_features)
             return lang_encoders[lang]
 
         def get_decoder(args,lang):
@@ -161,7 +162,8 @@ class InterlinguaTransformerModel(FairseqInterlinguaModel):
                     )
                     if args.tie_lang_embeddings:
                         lang_embeddings[lang] = decoder_embed_tokens
-                lang_decoders[lang] = TransformerDecoder(args, task.dicts[lang], decoder_embed_tokens)
+                lang_decoders[lang] = SpeechTransformerDecoder(args, task.dicts[lang], decoder_embed_tokens)
+                lang_decoders[lang] = SpeechTransformerDecoder(args, task.dicts[lang], decoder_embed_tokens)
             return lang_decoders[lang]
 
 
@@ -209,7 +211,7 @@ def base_interlingua_architecture(args):
 
 
 
-@register_model_architecture('speech_interlingua_transformer', 'speech_interlingua_transformer_base')
+@register_model_architecture('speech_interlingua_transformer', 'speech_interlingua_transformer_big')
 def speechtransformer_fbk(args):
     args.dropout = getattr(args, 'dropout', 0.3)
     args.normalization_constant = getattr(args, 'normalization_constant', 0.5)

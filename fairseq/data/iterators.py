@@ -89,6 +89,7 @@ class EpochBatchIterator(object):
         self._supports_prefetch = (
             hasattr(dataset, 'supports_prefetch') and dataset.supports_prefetch
         )
+        print("Iterator", "hasattr", hasattr(dataset, 'supports_prefetch'), "dataset.supports_prefetch", dataset.supports_prefetch, type(dataset) )
 
     def __len__(self):
         return len(self.frozen_batches)

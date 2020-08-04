@@ -15,7 +15,7 @@ from . import data_utils, FairseqDataset
 
 def collate(
     samples, pad_idx, eos_idx, left_pad_source=True, left_pad_target=False,
-    input_feeding=True, src_audio=False
+    input_feeding=True, src_audio=False, audio_features=256
 ):
     if len(samples) == 0:
         return {}
@@ -124,7 +124,7 @@ class AudioPairDataset(FairseqDataset):
         left_pad_source=True, left_pad_target=False,
         max_source_positions=1024, max_target_positions=1024,
         shuffle=True, input_feeding=True, remove_eos_from_source=False, append_eos_to_target=False,
-        src_audio=False, remove_eos_from_target=False,
+        src_audio=False,audio_features=256, remove_eos_from_target=False,
     ):
         if tgt_dict is not None and not src_audio:
             assert src_dict.pad() == tgt_dict.pad()
@@ -146,6 +146,7 @@ class AudioPairDataset(FairseqDataset):
         self.append_eos_to_target = append_eos_to_target
         self.remove_eos_from_target = remove_eos_from_target
         self.src_audio = src_audio
+        self.audio_features = audio_features
 
     def __getitem__(self, index):
         tgt_item = self.tgt[index] if self.tgt is not None else None
@@ -207,7 +208,7 @@ class AudioPairDataset(FairseqDataset):
         return collate(
             samples, pad_idx=self.src_dict.pad(), eos_idx=self.src_dict.eos(),
             left_pad_source=self.left_pad_source, left_pad_target=self.left_pad_target,
-            input_feeding=self.input_feeding, src_audio=self.src_audio
+            input_feeding=self.input_feeding, src_audio=self.src_audio, audio_features=self.audio_features
         )
 
     def get_dummy_batch(self, num_tokens, max_positions, src_len=128, tgt_len=128):
@@ -246,7 +247,6 @@ class AudioPairDataset(FairseqDataset):
             indices = np.arange(len(self))
         if self.tgt_sizes is not None:
             indices = indices[np.argsort(self.tgt_sizes[indices], kind='mergesort')]
-        print("INDICES", len(indices), "SRC_SIZES", len(self.src_sizes))
         return indices[np.argsort(self.src_sizes[indices], kind='mergesort')]
 
     def prefetch(self, indices):
