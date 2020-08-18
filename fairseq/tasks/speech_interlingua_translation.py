@@ -78,6 +78,8 @@ class SpeechInterlinguaTranslationTask(FairseqTask):
                             help='load audio input dataset')
         parser.add_argument('--upsample-primary', default=1, type=int,
                             help='amount to upsample primary dataset')
+        parser.add_argument('--final-norm', action='store_true',
+                            help='decoder final layer normalization')
 
     def __init__(self, args, dicts, training):
         super().__init__(args)
@@ -87,6 +89,7 @@ class SpeechInterlinguaTranslationTask(FairseqTask):
         self.num_updates = 0
         self.auto = args.auto_encoding == 'True'
         self.adapt = args.adapt_schedule
+        self.final_norm = True if args.final_norm else False
         pass
 
     @classmethod

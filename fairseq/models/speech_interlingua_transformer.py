@@ -162,8 +162,8 @@ class InterlinguaTransformerModel(FairseqInterlinguaModel):
                     )
                     if args.tie_lang_embeddings:
                         lang_embeddings[lang] = decoder_embed_tokens
-                lang_decoders[lang] = SpeechTransformerDecoder(args, task.dicts[lang], decoder_embed_tokens)
-                lang_decoders[lang] = SpeechTransformerDecoder(args, task.dicts[lang], decoder_embed_tokens)
+                lang_decoders[lang] = SpeechTransformerDecoder(args, task.dicts[lang], decoder_embed_tokens,final_norm=task.final_norm)
+                #lang_decoders[lang] = SpeechTransformerDecoder(args, task.dicts[lang], decoder_embed_tokens,final_norm=False)
             return lang_decoders[lang]
 
 

@@ -9,9 +9,9 @@ mkdir -p $DEST_DIR
 
 
 
-#subword-nmt apply-bpe -c  ${DEST_DIR}/codes/$TGT.codes < $WORKING_DIR/train/train.$TGT >  ${DEST_DIR}/train.$TGT 
-#subword-nmt apply-bpe -c  ${DEST_DIR}/codes/$TGT.codes < $WORKING_DIR/dev/dev.$TGT >  ${DEST_DIR}/dev.$TGT 
-#subword-nmt apply-bpe -c  ${DEST_DIR}/codes/$TGT.codes < $WORKING_DIR/tst-COMMON/tst-COMMON.$TGT >  ${DEST_DIR}/tst-COMMON.$TGT
+subword-nmt apply-bpe -c  ${DEST_DIR}/codes/$TGT.codes < $WORKING_DIR/train/train.$TGT >  ${DEST_DIR}/train.$TGT 
+subword-nmt apply-bpe -c  ${DEST_DIR}/codes/$TGT.codes < $WORKING_DIR/dev/dev.$TGT >  ${DEST_DIR}/dev.$TGT 
+subword-nmt apply-bpe -c  ${DEST_DIR}/codes/$TGT.codes < $WORKING_DIR/tst-COMMON/tst-COMMON.$TGT >  ${DEST_DIR}/tst-COMMON.$TGT
 
 cp $WORKING_DIR/train/train.h5 $DEST_DIR/train.h5
 cp $WORKING_DIR/dev/dev.h5 $DEST_DIR/dev.h5

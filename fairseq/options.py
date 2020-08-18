@@ -55,6 +55,15 @@ def get_generation_add_lang_parser(interactive=False, default_task='translation'
     return parser
 
 
+def get_add_audio_parser(default_task='translation'):
+    parser = get_parser('Trainer', default_task)
+    add_dataset_args(parser, train=True)
+    add_distributed_training_args(parser)
+    add_model_args(parser)
+    add_optimization_args(parser)
+    add_checkpoint_args(parser)
+    add_audio_args(parser)
+    return parser
 
 
 def get_add_lang_parser(default_task='translation'):
@@ -419,6 +428,14 @@ def finetune_args(parser):
     group.add_argument('--prev-dec-model',default='',type=str, help='Path to previous decoder model')
     group.add_argument('--freeze-dec',default='',type=str, help='Freeze decoder module')
 
+def add_audio_args(parser):
+    group = parser.add_argument_group('AddAudio')
+    group.add_argument('--enckey', default='en-en',type=str, help='Key in pretrained encoder model')
+    group.add_argument('--deckey', default='en-en',type=str, help='Key in pretrained decoder model')
+    group.add_argument('--newkey', default='en-en',type=str, help='Key in new model')
+    group.add_argument('--prev-enc-model',default='',type=str, help='Path to previous encoder model')
+    group.add_argument('--prev-dec-model',default='',type=str, help='Path to previous decoder model')
+    group.add_argument('--reuse',default='encoder',type=str, help='Which part of the previous model to use', choices=['encoder','decoder','both'])
 
 def add_lang_args(parser):
     group = parser.add_argument_group('AddLang')

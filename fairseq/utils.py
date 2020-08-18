@@ -163,6 +163,54 @@ def load_partial_unsup_model_state(enc_filename,dec_filename,pivot_filename ,mod
     return enc_state['extra_state'], enc_state['optimizer_history'], enc_state['last_optimizer_state']
 
 
+def load_partial_audio_model_state(enc_file,dec_file, model,enckey,deckey,newkey,reuse,path=None):
+    if not os.path.exists(enc_file) or not os.path.exists(dec_file):
+        return None, [], None
+    
+    enc_state = torch.load(enc_file, map_location=lambda s, l: default_restore_location(s, 'cpu'))
+    enc_state = _upgrade_state_dict(enc_state)
+    
+    dec_state = torch.load(dec_file, map_location=lambda s, l: default_restore_location(s, 'cpu'))
+    dec_state = _upgrade_state_dict(dec_state)
+    model_state = OrderedDict()
+    
+    if reuse in ['encoder','both']:
+        model_state.update(OrderedDict({k.replace(enckey,newkey):v for k,v in enc_state['model'].items() if enckey + '.encoder' in k}))
+        print('Encoder params', enc_file, len(model_state),enckey,newkey)
+    if reuse in ['decoder','both']:
+        model_state.update(OrderedDict({k.replace(deckey,newkey):v for k,v in dec_state['model'].items() if deckey + '.decoder' in k}))
+        print('Decoder params', dec_file,  len(model_state),deckey,newkey)
+    
+    enc_state['model'] = OrderedDict(model_state)
+
+    print('LOAD PARTIAL MODEL', enckey, deckey,newkey,reuse, len(enc_state['model']))
+    model.upgrade_state_dict(enc_state['model'])
+    model_keys =  list(model.state_dict().keys())
+    print('keys in model not in checkpoint')
+
+    for k in enc_state['model']:
+        if 'embed_tokens' in k:
+            print(k)
+
+    for k in model_keys:
+        if k not in list(enc_state['model'].keys()):
+            print(k)
+    print('******************************')
+    print('keys in checkpoint not in model')
+    for k in  list(enc_state['model'].keys()):
+        if k not in model_keys:
+            print(k)
+    print('******************************')
+    # load model parameters
+    try:
+        model.load_state_dict(enc_state['model'], strict=False)
+    except Exception:
+        raise Exception('Cannot load model parameters from checkpoint, '
+                        'please ensure that the architectures match')
+
+    return enc_state['extra_state'], enc_state['optimizer_history'], enc_state['last_optimizer_state']
+
+
 def load_partial_model_state(filename, model,key,newkey,reuse,finetune,path=None):
     if not os.path.exists(filename):
         return None, [], None
@@ -176,6 +224,17 @@ def load_partial_model_state(filename, model,key,newkey,reuse,finetune,path=None
             state['model']['.'.join(['model',newkey,reuse,'embed_tokens','weight'])] = load_pretrained_embeddings(path)
     print('LOAD PARTIAL MODEL', key,newkey,reuse,finetune, len(state['model']))
     model.upgrade_state_dict(state['model'])
+    model_keys = [ k  for k in list(model.state_dict().keys()) if 'decoder' in k]
+    print('keys in model not in checkpoint')
+    for k in model_keys:
+        if k not in list(state['model'].keys()):
+            print(k)
+    print('******************************')
+    print('keys in checkpoint not in model')
+    for k in  list(state['model'].keys()):
+        if k not in model_keys:
+            print(k)
+    print('******************************')
 
     # load model parameters
     try:

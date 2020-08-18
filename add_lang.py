@@ -72,14 +72,16 @@ def main(args):
         num_shards=args.distributed_world_size,
         shard_id=args.distributed_rank,
     )
+    
+
+    # Load the latest checkpoint if one is available
+    if not load_checkpoint(args, trainer, epoch_itr) and not 'speech' in args.task:
+        trainer.dummy_train_step([dummy_batch])
+    
 
     print('load previous model')
     #Load partial previous model
     load_previous_model(args,trainer)
-
-    # Load the latest checkpoint if one is available
-    if not load_checkpoint(args, trainer, epoch_itr):
-        trainer.dummy_train_step([dummy_batch])
 
     # Train until the learning rate gets too small
     max_epoch = args.max_epoch or math.inf
@@ -111,8 +113,13 @@ def load_previous_model(args, trainer):
     os.makedirs(args.save_dir, exist_ok=True)
     checkpoint_path = os.path.join(args.prev_model, args.restore_file)
     if os.path.isfile(checkpoint_path):
-        trainer.load_partial_checkpoint(checkpoint_path,args.key, args.newkey, args.reuse, args.reset_optimizer, args.reset_lr_scheduler,
-                                              eval(args.optimizer_overrides))
+        trainer.load_partial_checkpoint(checkpoint_path,
+                                        args.key, 
+                                        args.newkey, 
+                                        args.reuse, 
+                                        args.reset_optimizer, 
+                                        args.reset_lr_scheduler,
+                                        eval(args.optimizer_overrides))
         return True
     return False
 

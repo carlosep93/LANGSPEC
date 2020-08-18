@@ -1,11 +1,11 @@
 
-DEST_DIR='data-bin/audio-enen'
-CP_DIR='checkpoints/asr-en-scratch'
+DEST_DIR='data-bin/audio-enen-melspec'
+CP_DIR='checkpoints/asr_en_scratch_melspec'
 
 mkdir -p $CP_DIR
 
 CUDA_VISIBLE_DEVICES=0 python train.py $DEST_DIR  \
-    --clip-norm 20 \
+    --clip-norm 20.0 \
     --max-sentences 8 \
     --max-tokens 12000 \
     --save-dir  $CP_DIR \
@@ -28,4 +28,5 @@ CUDA_VISIBLE_DEVICES=0 python train.py $DEST_DIR  \
     --lang-pairs ens-en \
     --freeze-schedule n-n \
     --label-smoothing 0.1 \
-    --no-cache-source
+    --no-cache-source \
+    --audio-features 40
