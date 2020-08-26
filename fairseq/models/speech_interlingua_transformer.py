@@ -236,3 +236,38 @@ def speechtransformer_fbk(args):
     args.decoder_attention_heads = getattr(args, 'decoder_attention_heads', 8)
     args.decoder_learned_pos = getattr(args, 'decoder_learned_pos', False)
     args.decoder_normalize_before = getattr(args, 'decoder_normalize_before', True)
+    args.adapter_netword = getattr(args, 'adapter_network', False)
+    args.adapter_size = getattr(args, 'adapter_size', 1024)
+
+
+
+@register_model_architecture('speech_interlingua_transformer', 'speech_interlingua_transformer_big_3conv')
+def speechtransformer_fbk(args):
+    args.dropout = getattr(args, 'dropout', 0.3)
+    args.normalization_constant = getattr(args, 'normalization_constant', 0.5)
+    args.attention_dropout = getattr(args, 'attention_dropout', 0.1)
+    args.relu_dropout = getattr(args, 'relu_dropout', 0.1)
+    args.attn_2d = not getattr(args, 'no_attn_2d', False)
+
+    args.encoder_embed_dim = getattr(args, 'encoder_embed_dim', 512)
+    args.encoder_convolutions = getattr(args, 'encoder_convolutions', '[(64, 3, 3)] * 3')
+    args.encoder_layers = getattr(args, 'encoder_layers', 6)
+    args.encoder_ffn_embed_dim = getattr(args, 'encoder_ffn_embed_dim', 2048)
+    args.encoder_attention_heads = getattr(args, 'encoder_attention_heads', 8)
+    args.encoder_learned_pos = getattr(args, 'encoder_learned_pos', False)
+    args.encoder_normalize_before = getattr(args, 'encoder_normalize_before', False)
+    args.distance_penalty = getattr(args, 'distance_penalty', False)
+
+    args.decoder_embed_dim = getattr(args, 'decoder_embed_dim', 512)
+    args.decoder_layers = getattr(args, 'decoder_layers', 6)
+    args.decoder_out_embed_dim = getattr(args, 'decoder_out_embed_dim', 512)
+    args.decoder_output_dim = getattr(args, 'decoder_output_dim', 512)
+    args.decoder_ffn_embed_dim = getattr(args, 'decoder_ffn_embed_dim', 2048)
+    args.decoder_attention_heads = getattr(args, 'decoder_attention_heads', 8)
+    args.decoder_learned_pos = getattr(args, 'decoder_learned_pos', False)
+    args.decoder_normalize_before = getattr(args, 'decoder_normalize_before', False)
+    args.adapter_netword = getattr(args, 'adapter_network', False)
+    args.adapter_size = getattr(args, 'adapter_size', 1024)
+
+
+

@@ -182,16 +182,11 @@ def load_partial_audio_model_state(enc_file,dec_file, model,enckey,deckey,newkey
         print('Decoder params', dec_file,  len(model_state),deckey,newkey)
     
     enc_state['model'] = OrderedDict(model_state)
-
     print('LOAD PARTIAL MODEL', enckey, deckey,newkey,reuse, len(enc_state['model']))
     model.upgrade_state_dict(enc_state['model'])
     model_keys =  list(model.state_dict().keys())
     print('keys in model not in checkpoint')
-
-    for k in enc_state['model']:
-        if 'embed_tokens' in k:
-            print(k)
-
+    
     for k in model_keys:
         if k not in list(enc_state['model'].keys()):
             print(k)
@@ -207,6 +202,7 @@ def load_partial_audio_model_state(enc_file,dec_file, model,enckey,deckey,newkey
     except Exception:
         raise Exception('Cannot load model parameters from checkpoint, '
                         'please ensure that the architectures match')
+
 
     return enc_state['extra_state'], enc_state['optimizer_history'], enc_state['last_optimizer_state']
 

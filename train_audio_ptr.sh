@@ -1,7 +1,7 @@
 
 DEST_DIR='data-bin/audio-enen-melspec'
-CP_DIR='checkpoints/asr_en_ptr_melspec'
-PREV_ENC_DIR='checkpoints/asr_en_scratch_melspec'
+CP_DIR='checkpoints/asr_en_melspec_ptr_3conv_adapt_3ttn'
+PREV_ENC_DIR='checkpoints/asr_en_scratch_melspec-3conv'
 PREV_DEC_DIR='checkpoints/europarl-basic-tied'
 
 
@@ -22,7 +22,7 @@ CUDA_VISIBLE_DEVICES=4 python add_audio.py $DEST_DIR \
     --warmup-updates 4000 \
     --warmup-init-lr 3e-4 \
     --optimizer adam \
-    --arch speech_interlingua_transformer_big \
+    --arch speech_interlingua_transformer_big_3conv \
     --task speech_interlingua_translation  \
     --audio-input \
     --max-source-positions 2000 --max-target-positions 300 \
@@ -35,11 +35,17 @@ CUDA_VISIBLE_DEVICES=4 python add_audio.py $DEST_DIR \
     --enckey ens-en \
     --deckey de-en \
     --newkey ens-en \
-    --reuse decoder \
+    --reuse both \
     --prev-enc-model $PREV_ENC_DIR \
     --prev-dec-model $PREV_DEC_DIR \
      --reset-optimizer \
     --lang-pairs ens-en \
     --restore-file checkpoint_best.pt \
     --freeze-schedule n-f \
-    --no-cache-source
+    --no-cache-source \
+    --encoder-normalize-before \
+    --adapter-network \
+    --adapter-size 256 \
+    --adapter-attn-layers 3 
+    #--decoder-normalize-before \
+    #--final-norm \

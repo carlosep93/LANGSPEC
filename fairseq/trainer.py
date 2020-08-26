@@ -293,12 +293,17 @@ class Trainer(object):
                     meter.reset()
 
         #Freeze pretrained part of the model
-        if reuse in ['encoder']:
+        if reuse in ['encoder','both']:
             self.model.encoder.train(False)
             for p in self.model.encoder.parameters():
                 p.requires_grad = False
-
-        if reuse in ['decoder']:
+            #Train  adapter network even when the encoder is frozen
+            if self.model.encoder.adapt:
+                self.model.encoder.adapter.train(True)
+                for p in self.model.encoder.adapter.parameters():
+                    p.requires_grad = True
+            
+        if reuse in ['decoder','both']:
             self.model.decoder.train(False)
             for p in self.model.decoder.parameters():
                 p.requires_grad = False

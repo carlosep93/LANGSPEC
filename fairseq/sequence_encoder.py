@@ -39,17 +39,23 @@ class SequenceEncoder(object):
                 sample['src_lengths'] = torch.IntTensor([max_length]*len(sample['src_lengths']))
         return sample
 
-    def encode_batched_itr(self, data_itr, max_length=220 ,cuda=False, timer=None):
+    def encode_batched_itr(self, data_itr, max_length=220 ,cuda=False, timer=None,pad=True):
         """Iterate over a batched dataset and yield scored translations."""
         for sample in data_itr:
             s = utils.move_to_cuda(sample) if cuda else sample
-            s = self.pad_sample(s,max_length)
+            if pad:
+                s = self.pad_sample(s,max_length)
             if timer is not None:
                 timer.start()
             encodings = self.encode(s)
             for i, id in enumerate(s['id'].data):
                 # remove padding from ref
-                src = utils.strip_pad(s['net_input']['src_tokens'].data[i, :], self.pad)
+                if isinstance(s['net_input']['src_tokens'], list):
+                    src = utils.strip_pad(s['net_input']['src_tokens'][0].data[i, :], self.pad)
+                else:
+                    src = utils.strip_pad(s['net_input']['src_tokens'].data[i, :], self.pad)
+
+                #src = utils.strip_pad(input['src_tokens'].data[i, :], self.pad)
                 ref = utils.strip_pad(s['target'].data[i, :], self.pad) if s['target'] is not None else None
                 encoding_i = encodings['encoder_out'][i]
                 print(encoding_i.shape)
@@ -74,6 +80,7 @@ class SequenceEncoder(object):
     def encode(self, sample):
         """Score a batch of translations."""
         net_input = sample['net_input']
+        print('Input shape', net_input['src_tokens'].shape)
         net_input.pop('prev_output_tokens',None)
         for model in self.models:
             with torch.no_grad():

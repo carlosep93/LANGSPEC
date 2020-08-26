@@ -89,6 +89,12 @@ class SpeechTransformerModel(FairseqInterlinguaModel):
                             help='Add distance penalty to the encoder')
         parser.add_argument('--init-variance', type=float, default=1.0,
                             help='Initialization value for variance')
+        parser.add_argument('--adapter-network', action='store_true',
+                            help='add-adapter network for model finetuning')
+        parser.add_argument('--adapter-size', type=int, metavar='N',
+                            help='hidden size of the adapter down projection')
+        parser.add_argument('--adapter-attn-layers', type=int, metavar='N',
+                            help='attention layers for the adapter network')
 
 
     @classmethod
@@ -129,6 +135,40 @@ class SpeechTransformerModel(FairseqInterlinguaModel):
         return TransformerModel(encoder, decoder)
 
 
+class Adapter(nn.Module):
+    """
+    Adapter for model finetuning, as descripted in:
+    https://arxiv.org/pdf/1909.08478.pdf
+    """
+    def __init__(self, args):
+        super().__init__()
+        self.embed_dim = args.encoder_embed_dim
+        self.projection_size = args.adapter_size
+        self.layer_norm = LayerNorm(args.encoder_embed_dim)
+        self.relu = nn.ReLU()
+        self.fc1 = Linear(self.embed_dim, self.projection_size)
+        self.fc2 = Linear(self.projection_size,self.embed_dim)
+        self.attn_layers = nn.ModuleList([])
+        self.attn_layers.extend([
+            TransformerEncoderLayer(args)
+            for _ in range(args.adapter_attn_layers)
+        ])
+       
+
+
+    def forward(self,x,encoder_padding_mask):
+        # encoder layers
+        for layer in self.attn_layers:
+            x = layer(x, encoder_padding_mask)
+        #Keep values for residual connection
+        residual = x  
+        normalized = self.layer_norm(x)
+        proj_down = self.relu(self.fc1(normalized))
+        proj_up = self.fc2(proj_down)
+        return proj_up + residual
+                  
+
+
 class SpeechTransformerEncoder(FairseqEncoder):
     """Transformer encoder."""
     def __init__(self, args, dictionary, left_pad=True, convolutions=((512, 3),) * 20, stride=2,
@@ -160,7 +200,9 @@ class SpeechTransformerEncoder(FairseqEncoder):
                                                           dropout=self.dropout) for _ in range(2)])
         self.bn = nn.ModuleList([BatchNorm(out_channels) for _ in range(len(convolutions))])
 
-        flat_dim = math.ceil(math.ceil(audio_features / 2) / 2) * out_channels
+
+        #flat_dim = math.ceil(math.ceil(audio_features / 2) / 2) * out_channels
+        flat_dim = math.ceil(audio_features / 2 ** len(convolutions)) * out_channels
         self.layers = nn.ModuleList([])
 
         self.fc3 = Linear(flat_dim, args.encoder_embed_dim)
@@ -177,10 +219,16 @@ class SpeechTransformerEncoder(FairseqEncoder):
         self.normalize = args.encoder_normalize_before
         if self.normalize:
            self.layer_norm = LayerNorm(args.encoder_embed_dim)
+        self.adapt = args.adapter_network if hasattr(args,'adapter_network') else False
+        if self.adapt:
+            self.adapter = Adapter(args)
+
 
     def forward(self, src_tokens, src_lengths):
         #B x T x C -> B x 1 x T x C
         x = src_tokens.unsqueeze(1)
+
+        
         # temporal convolutions
         for i, conv in enumerate(self.convolutions):
             if conv.kernel_size[0] % 2 == 1:
@@ -203,6 +251,8 @@ class SpeechTransformerEncoder(FairseqEncoder):
             x, _ = self.attn_2d[1](query=x, key=x, value=x)
             x = x + residual
 
+
+
         # B x Cout x T x F -> T x B x C
         bsz, out_channels, time, feats = x.size()
         x = x.transpose(1, 2).contiguous().view(bsz, time, -1) \
@@ -220,6 +270,9 @@ class SpeechTransformerEncoder(FairseqEncoder):
 
         if self.normalize:
             x = self.layer_norm(x)
+
+        if self.adapt:
+            x = self.adapter(x,encoder_padding_mask)
 
         return {
             'encoder_out': x,  # T x B x C
@@ -801,6 +854,8 @@ def speechtransformer_fbk(args):
     args.decoder_ffn_embed_dim = getattr(args, 'decoder_ffn_embed_dim', 2048)
     args.decoder_attention_heads = getattr(args, 'decoder_attention_heads', 8)
     args.decoder_learned_pos = getattr(args, 'decoder_learned_pos', False)
+    args.adapter_netword = getattr(args, 'adapter_network', False)
+    args.adapter_size = getattr(args, 'adapter_size', 1024)
     args.decoder_normalize_before = getattr(args, 'decoder_normalize_before', True)
 
 

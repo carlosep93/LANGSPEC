@@ -70,7 +70,6 @@ def collate(
             prev_output_tokens = prev_output_tokens.index_select(0, sort_order)
     else:
         ntokens = sum(len(s['source']) for s in samples)
-
     batch = {
                 'id': id,
                 'nsentences': len(samples),

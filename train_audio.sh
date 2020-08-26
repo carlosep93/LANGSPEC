@@ -1,10 +1,10 @@
 
 DEST_DIR='data-bin/audio-enen-melspec'
-CP_DIR='checkpoints/asr_en_scratch_melspec'
+CP_DIR='checkpoints/asr_en_scratch_melspec-3conv'
 
 mkdir -p $CP_DIR
 
-CUDA_VISIBLE_DEVICES=0 python train.py $DEST_DIR  \
+CUDA_VISIBLE_DEVICES=2 python train.py $DEST_DIR  \
     --clip-norm 20.0 \
     --max-sentences 8 \
     --max-tokens 12000 \
@@ -16,7 +16,7 @@ CUDA_VISIBLE_DEVICES=0 python train.py $DEST_DIR  \
     --lr-schedule inverse_sqrt \
     --warmup-updates 4000 --warmup-init-lr 3e-4 \
     --optimizer adam \
-    --arch speech_interlingua_transformer_big \
+    --arch speech_interlingua_transformer_big_3conv \
     --task speech_interlingua_translation  \
     --audio-input \
     --max-source-positions 2000 --max-target-positions 300 \
