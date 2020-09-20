@@ -326,7 +326,7 @@ def load_partial_model_for_inference(enc_filename,enc_key, dec_filename, dec_key
     dec_state = _upgrade_state_dict(dec_state)
     dec_state['model'] = OrderedDict({k.replace('.'+dec_key+'.','.'+newkey+'.'):v for k,v in dec_state['model'].items() if dec_key + '.' + 'decoder' in k})
 
-    args = dec_state['args']
+    args = enc_state['args']
     args.task = newtask
     args.arch = newarch
     args.source_lang = newkey.split('-')[0]

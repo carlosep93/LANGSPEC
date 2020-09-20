@@ -187,6 +187,7 @@ class SpeechInterlinguaTranslationTask(FairseqTask):
             else:
                 lang_pair = sort_lang_pair(lang_pair)
                 tgt_dataset, src_dataset = src_datasets[lang_pair], tgt_datasets[lang_pair]
+            print('Task Audio Input', self.args.audio_input)
             return AudioPairDataset(
                 src_dataset, src_dataset.sizes, self.dicts[src],
                 tgt_dataset, tgt_dataset.sizes, self.dicts[tgt],
@@ -241,6 +242,12 @@ class SpeechInterlinguaTranslationTask(FairseqTask):
             model.models[lang_pair].encoder.eval()
             for p in model.models[lang_pair].encoder.parameters():
                 p.requires_grad = False
+            #Train  adapter network even when the encoder is frozen
+            if self.model.encoder.adapt:
+                self.model.encoder.adapter.train(True)
+                for p in self.model.encoder.adapter.parameters():
+                    p.requires_grad = True
+
         #freeze decoder if required by schedule
         if schedule[1] == 'f':
             model.models[lang_pair].decoder.eval()

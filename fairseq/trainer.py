@@ -291,7 +291,7 @@ class Trainer(object):
             for meter in self.meters.values():
                 if isinstance(meter, TimeMeter):
                     meter.reset()
-
+        '''
         #Freeze pretrained part of the model
         if reuse in ['encoder','both']:
             self.model.encoder.train(False)
@@ -307,7 +307,7 @@ class Trainer(object):
             self.model.decoder.train(False)
             for p in self.model.decoder.parameters():
                 p.requires_grad = False
-        
+        '''
         return extra_state
 
 
