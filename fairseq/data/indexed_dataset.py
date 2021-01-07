@@ -32,6 +32,7 @@ dtypes = {
     5: np.int64,
     6: np.float,
     7: np.double,
+    8: np.float32
 }
 
 
@@ -49,6 +50,68 @@ def data_file_path(prefix_path):
     return prefix_path + '.bin'
 
 
+class IndexedDataset(torch.utils.data.Dataset):
+    """Loader for TorchNet IndexedDataset"""
+
+    def __init__(self, path, fix_lua_indexing=False, read_data=True, audio=False, audio_features=256):
+        super().__init__()
+        self.fix_lua_indexing = fix_lua_indexing
+        self.read_index(path)
+        self.data_file = None
+        self.audio = audio
+        self.audio_features = audio_features
+        if read_data:
+            self.read_data(path)
+
+    def read_index(self, path):
+        with open(index_file_path(path), 'rb') as f:
+            magic = f.read(8)
+            assert magic == b'TNTIDX\x00\x00'
+            version = f.read(8)
+            assert struct.unpack('<Q', version) == (1,)
+            code, self.element_size = struct.unpack('<QQ', f.read(16))
+            self.dtype = dtypes[code]
+            self.size, self.s = struct.unpack('<QQ', f.read(16))
+            self.dim_offsets = read_longs(f, self.size + 1)
+            self.data_offsets = read_longs(f, self.size + 1)
+            self.sizes = read_longs(f, self.s)
+
+    def read_data(self, path):
+        self.data_file = open(data_file_path(path), 'rb', buffering=0)
+
+    def check_index(self, i):
+        if i < 0 or i >= self.size:
+            raise IndexError('index out of range')
+
+    def __del__(self):
+        if self.data_file:
+            self.data_file.close()
+
+    def __getitem__(self, i):
+        self.check_index(i)
+        tensor_size = self.sizes[self.dim_offsets[i]:self.dim_offsets[i + 1]]
+        a = np.empty(tensor_size, dtype=self.dtype)
+        self.data_file.seek(self.data_offsets[i] * self.element_size)
+        self.data_file.readinto(a)
+        item = torch.from_numpy(a)
+        if not self.audio:
+            item = item.long()
+        if self.fix_lua_indexing:
+            item -= 1  # subtract 1 for 0-based indexing
+        return item
+
+    def __len__(self):
+        return self.size
+
+    @staticmethod
+    def exists(path):
+        return (
+            os.path.exists(index_file_path(path)) and
+            os.path.exists(data_file_path(path))
+        )
+
+
+'''
 class IndexedDataset(torch.utils.data.Dataset):
     """Loader for TorchNet IndexedDataset"""
 
@@ -125,7 +188,7 @@ class IndexedCachedDataset(IndexedDataset):
         for i in indices:
             total_size += self.data_offsets[i + 1] - self.data_offsets[i]
         self.cache = np.empty(total_size, dtype=self.dtype)
-        ptx = 0
+        ptx = 0q
         self.cache_index.clear()
         for i in indices:
             self.cache_index[i] = ptx
@@ -145,13 +208,14 @@ class IndexedCachedDataset(IndexedDataset):
         if self.fix_lua_indexing:
             item -= 1  # subtract 1 for 0-based indexing
         return item
-
+'''
 
 class IndexedInMemoryDataset(IndexedDataset):
     """Loader for TorchNet IndexedDataset, keeps all the data in memory"""
 
     def read_data(self, path):
         self.data_file = open(data_file_path(path), 'rb')
+        print("self.data_offsets", self.data_offsets)
         self.buffer = np.empty(self.data_offsets[-1], dtype=self.dtype)
         self.data_file.readinto(self.buffer)
         self.data_file.close()
@@ -221,6 +285,7 @@ class IndexedDatasetBuilder(object):
         np.int32: 4,
         np.int64: 8,
         np.float: 4,
+        np.float32:4,
         np.double: 8
     }
 
@@ -271,3 +336,114 @@ class IndexedDatasetBuilder(object):
         write_longs(index, self.data_offsets)
         write_longs(index, self.sizes)
         index.close()
+
+#Code from:
+#https://github.com/mattiadg/FBK-Fairseq-ST
+class IndexedCachedDataset(IndexedDataset):
+
+    def __init__(self, path, fix_lua_indexing=False, audio=False):
+        super().__init__(path, fix_lua_indexing, True)
+        self.cache = None
+        self.cache_index = {}
+        if audio:
+            self.dtype=np.float32
+        self.audio = audio
+
+
+    @property
+    def supports_prefetch(self):
+        return True
+
+    def prefetch(self, indices):
+        if all(i in self.cache_index for i in indices):
+            return
+        indices = sorted(set(indices))
+        total_size = 0
+        for i in indices:
+            total_size += self.data_offsets[i + 1] - self.data_offsets[i]
+        self.cache = np.empty(total_size, dtype=self.dtype)
+        ptx = 0
+        self.cache_index.clear()
+        for i in indices:
+            self.cache_index[i] = ptx
+            size = self.data_offsets[i + 1] - self.data_offsets[i]
+            a = self.cache[ptx:ptx + size]
+            self.data_file.seek(self.data_offsets[i] * self.element_size)
+            self.data_file.readinto(a)
+            ptx += size
+
+    def fetch(self, index):    
+        size = self.data_offsets[index+1] - self.data_offsets[index]
+        data = np.empty(size, dtype=self.dtype)
+        self.data_file.seek(self.data_offsets[index] * self.element_size)
+        self.data_file.readinto(data)
+        return data
+
+    def __getitem__(self, i):
+        self.check_index(i)
+        tensor_size = self.sizes[self.dim_offsets[i]:self.dim_offsets[i + 1]]
+        data = np.empty(tensor_size, dtype=self.dtype)
+        a = self.fetch(i)
+        np.copyto(data, a.reshape(tensor_size))
+        item = torch.from_numpy(a)
+        if not self.audio:
+            item = item.long()
+        if self.fix_lua_indexing:
+            item -= 1  # subtract 1 for 0-based indexing
+        return item
+
+
+class AudioIndexedInMemoryDataset(IndexedDataset):
+    """Loader for TorchNet IndexedDataset, keeps all the data in memory"""
+
+    def __init__(self, path, fix_lua_indexing=False):
+        super().__init__(path, fix_lua_indexing, True)
+        self.cache = None
+        self.cache_index = {}
+
+    #def read_data(self, path):
+    #    self.data_file = open(data_file_path(path), 'rb')
+    #    self.buffer = np.empty(self.data_offsets[-1], dtype=self.dtype)
+    #    self.data_file.readinto(self.buffer)
+    #    self.data_file.close()
+    #    if self.fix_lua_indexing:
+    #        self.buffer -= 1  # subtract 1 for 0-based indexing
+
+    @property
+    def supports_prefetch(self):
+        return True
+
+    def prefetch(self, indices):
+        if all(i in self.cache_index for i in indices):
+            return
+        indices = sorted(set(indices))
+        total_size = 0
+        for i in indices:
+            total_size += self.data_offsets[i + 1] - self.data_offsets[i]
+        self.cache = np.empty(total_size, dtype=self.dtype)
+        ptx = 0
+        self.cache_index.clear()
+        for i in indices:
+            self.cache_index[i] = ptx
+            size = self.data_offsets[i + 1] - self.data_offsets[i]
+            a = self.cache[ptx : ptx + size]
+            self.data_file.seek(self.data_offsets[i] * self.element_size)
+            self.data_file.readinto(a)
+            ptx += size
+
+    def __del__(self):
+        pass
+
+    def __getitem__(self, i):
+        self.check_index(i)
+        tensor_size = self.sizes[self.dim_offsets[i]:self.dim_offsets[i + 1]]
+        a = np.empty(tensor_size, dtype=self.dtype)
+        ptx = self.cache_index[i]
+        np.copyto(a, self.cache[ptx: ptx + a.size].reshape(tensor_size))
+        item = torch.from_numpy(a)
+        if self.fix_lua_indexing:
+            item -= 1  # subtract 1 for 0-based indexing
+        return item
+        #np.copyto(a, self.buffer[self.data_offsets[i]:self.data_offsets[i + 1]]
+        #          .reshape(tensor_size))
+        #return torch.from_numpy(a)

@@ -91,11 +91,13 @@ def main(args):
     if use_cuda:
         encoder.cuda()
 
+    pad = options.eval_bool(args.pad)
+
     # Generate and compute BLEU score
     num_sentences = 0
     has_target = True
     with progress_bar.build_progress_bar(args, itr) as t:
-        encodings = encoder.encode_batched_itr(t, cuda=use_cuda, timer=gen_timer)
+        encodings = encoder.encode_batched_itr(t, cuda=use_cuda, timer=gen_timer,pad=pad)
         data = {}
         i = 0
         for id,src,ref,hypos in encodings:

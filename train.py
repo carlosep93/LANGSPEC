@@ -43,20 +43,12 @@ def main(args):
     print('| model {}, criterion {}'.format(args.arch, criterion.__class__.__name__))
     print('| num. model params: {}'.format(sum(p.numel() for p in model.parameters())))
 
-    if not 'speech' in args.task:
-        # Make a dummy batch to (i) warm the caching allocator and (ii) as a
-        # placeholder DistributedDataParallel when there's an uneven number of
-        # batches per worker.
-        max_positions = utils.resolve_max_positions(
+    max_positions = utils.resolve_max_positions(
             task.max_positions(),
             model.max_positions(),
-        )
-        dummy_batch = task.dataset('train').get_dummy_batch(args.max_tokens, max_positions)
-        trainer = Trainer(args, task, model, criterion, dummy_batch)
-
-    else:
-        max_positions = task.max_positions()
-        trainer = Trainer(args, task, model, criterion, {})
+    )
+    dummy_batch = task.dataset('train').get_dummy_batch(args.max_tokens, max_positions)
+    trainer = Trainer(args, task, model, criterion, dummy_batch)
 
 
     print('| training on {} GPUs'.format(args.distributed_world_size))
@@ -79,7 +71,7 @@ def main(args):
     )
 
     # Load the latest checkpoint if one is available
-    if not load_checkpoint(args, trainer, epoch_itr) and  not 'speech' in args.task:
+    if not load_checkpoint(args, trainer, epoch_itr) and not 'speech' in args.task:
         trainer.dummy_train_step([dummy_batch])
 
     if 'nli' in args.task:
@@ -207,16 +199,13 @@ def get_training_stats(trainer):
 def validate(args, trainer, task, epoch_itr, subsets):
     """Evaluate the model on the validation set(s) and return the losses."""
     valid_losses = []
-    if not 'speech' in args.task:
-        # Make a dummy batch to (i) warm the caching allocator and (ii) as a
-        # placeholder DistributedDataParallel when there's an uneven number of
-        # batches per worker.
-        max_positions = utils.resolve_max_positions(
+    # Make a dummy batch to (i) warm the caching allocator and (ii) as a
+    # placeholder DistributedDataParallel when there's an uneven number of
+    # batches per worker.
+    max_positions = utils.resolve_max_positions(
             task.max_positions(),
             trainer.get_model().max_positions(),
-        )
-    else:
-        max_positions = task.max_positions()
+    )
 
     for subset in subsets:
         # Initialize data iterator

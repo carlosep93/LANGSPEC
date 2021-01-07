@@ -84,7 +84,14 @@ class SequenceGenerator(object):
                 k: v for k, v in input.items()
                 if k != 'prev_output_tokens'
             }
-            srclen = encoder_input['src_tokens'].size(1)
+            
+            #srclen = encoder_input['src_tokens'].size(1)
+
+            srclen = encoder_input['src_tokens'][0].size(1) if isinstance(encoder_input['src_tokens'], list) else \
+                    encoder_input['src_tokens'].size(1)
+
+
+
             if timer is not None:
                 timer.start()
             with torch.no_grad():
@@ -98,7 +105,13 @@ class SequenceGenerator(object):
                 timer.stop(sum(len(h[0]['tokens']) for h in hypos))
             for i, id in enumerate(s['id'].data):
                 # remove padding
-                src = utils.strip_pad(input['src_tokens'].data[i, :], self.pad)
+                #src = utils.strip_pad(input['src_tokens'].data[i, :], self.pad)
+
+                if isinstance(input['src_tokens'], list):
+                    src = utils.strip_pad(input['src_tokens'][0].data[i, :], self.pad)
+                else:
+                    src = utils.strip_pad(input['src_tokens'].data[i, :], self.pad)
+
                 ref = utils.strip_pad(s['target'].data[i, :], self.pad) if s['target'] is not None else None
                 yield id, src, ref, hypos[i]
 
@@ -119,7 +132,15 @@ class SequenceGenerator(object):
     def _generate(self, encoder_input, beam_size=None, maxlen=None, prefix_tokens=None):
         """See generate"""
         src_tokens = encoder_input['src_tokens']
-        bsz, srclen = src_tokens.size()
+        #bsz, srclen = src_tokens.size()
+
+        if isinstance(src_tokens, list):
+            src_tokens = src_tokens[0]
+        if len(src_tokens.size()) == 2:
+            bsz, srclen = src_tokens.size()
+        else:
+            bsz, srclen, feat_dim = src_tokens.size()
+
         maxlen = min(maxlen, self.maxlen) if maxlen is not None else self.maxlen
 
         # the max beam size is the dictionary size - 1, since we never select pad
@@ -139,14 +160,14 @@ class SequenceGenerator(object):
             # compute the encoder output for each beam
             encoder_out = model.encoder(**encoder_input)
             new_order = torch.arange(bsz).view(-1, 1).repeat(1, beam_size).view(-1)
-            new_order = new_order.to(src_tokens.device)
+            new_order = new_order.to(src_tokens.device).long()
             encoder_out = model.encoder.reorder_encoder_out(encoder_out, new_order)
             encoder_outs.append(encoder_out)
 
         # initialize buffers
         scores = src_tokens.data.new(bsz * beam_size, maxlen + 1).float().fill_(0)
         scores_buf = scores.clone()
-        tokens = src_tokens.data.new(bsz * beam_size, maxlen + 2).fill_(self.pad)
+        tokens = src_tokens.data.new(bsz * beam_size, maxlen + 2).fill_(self.pad).long()
         tokens_buf = tokens.clone()
         tokens[:, 0] = self.eos
         attn, attn_buf = None, None

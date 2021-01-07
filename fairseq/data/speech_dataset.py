@@ -161,7 +161,6 @@ def spec_augment(sample,W,F,T,mf,mt,p):
         sample[:, t0:t0 + t] = 0
 
     return sample
-    #Time masking
 
 
 class SpeechDataset(torch.utils.data.Dataset):
@@ -263,19 +262,6 @@ class SpeechDataset(torch.utils.data.Dataset):
     def __len__(self):
         return self.size
 
-    '''
-    def read_data(self, path, dictionary):
-        with open(path, 'r') as f:
-            for line in f:
-                self.lines.append(line.strip('\n'))
-                tokens = Tokenizer.tokenize(
-                    line, dictionary, add_if_not_exist=False,
-                    append_eos=self.append_eos, reverse_order=self.reverse_order,
-                ).long()
-                self.tokens_list.append(tokens)
-                self.sizes.append(len(tokens))
-        self.sizes = np.array(self.sizes)
-    '''
 
     def get_original_text(self, i):
         self.check_index(i)

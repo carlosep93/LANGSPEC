@@ -73,15 +73,12 @@ def main(args):
         shard_id=args.distributed_rank,
     )
     
-
-    # Load the latest checkpoint if one is available
-    if not load_checkpoint(args, trainer, epoch_itr) and not 'speech' in args.task:
-        trainer.dummy_train_step([dummy_batch])
-    
-
     print('load previous model')
     #Load partial previous model
     load_previous_model(args,trainer)
+    # Load the latest checkpoint if one is available
+    if not load_checkpoint(args, trainer, epoch_itr) and not 'speech' in args.task:
+        trainer.dummy_train_step([dummy_batch])
 
     # Train until the learning rate gets too small
     max_epoch = args.max_epoch or math.inf
@@ -108,13 +105,21 @@ def main(args):
     print('| done training in {:.1f} seconds'.format(train_meter.sum))
 
 
+
+
+
 def load_previous_model(args, trainer):
     """Load a checkpoint and replay dataloader to match."""
+    print('LOADING PREV MODEL')
     os.makedirs(args.save_dir, exist_ok=True)
-    checkpoint_path = os.path.join(args.prev_model, args.restore_file)
-    if os.path.isfile(checkpoint_path):
-        trainer.load_partial_checkpoint(checkpoint_path,
-                                        args.key, 
+    enc_checkpoint_path = os.path.join(args.prev_enc_model, args.restore_file)
+    dec_checkpoint_path = os.path.join(args.prev_dec_model, args.restore_file)
+    if os.path.isfile(enc_checkpoint_path) and os.path.isfile(dec_checkpoint_path):
+        print('PATHS EXIST')
+        trainer.load_partial_audio_checkpoint(enc_checkpoint_path,
+                                        dec_checkpoint_path,
+                                        args.enckey,
+                                        args.deckey, 
                                         args.newkey, 
                                         args.reuse, 
                                         args.reset_optimizer, 
@@ -364,7 +369,7 @@ def load_dataset_splits(task, splits):
 
 
 if __name__ == '__main__':
-    parser = options.get_add_lang_parser()
+    parser = options.get_add_audio_parser()
     args = options.parse_args_and_arch(parser)
 
     if args.distributed_port > 0 or args.distributed_init_method is not None:

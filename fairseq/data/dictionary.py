@@ -216,3 +216,96 @@ class TruncatedDictionary(object):
         if i < self.length:
             return self.wrapped_dict[i]
         return self.wrapped_dict.unk()
+
+#Code from:
+#https://github.com/mattiadg/FBK-Fairseq-ST
+class AudioDictionary(object):
+    """A mapping from symbols to consecutive integers"""
+    def __init__(self, pad='<pad>', eos='</s>', unk='<unk>', audio_features=0):
+        self.unk_word, self.pad_word, self.eos_word = unk, pad, eos
+        self.symbols = []
+        self.count = []
+        self.indices = {}
+        # dictionary indexing starts at 1 for consistency with Lua
+        self.add_symbol('<Lua heritage>')
+        self.pad_index = self.add_symbol(pad)
+        self.eos_index = self.add_symbol(eos)
+        self.unk_index = self.add_symbol(unk)
+        self.nspecial = len(self.symbols)
+        self.audio_features = audio_features
+
+    def __eq__(self, other):
+        return self.indices == other.indices
+
+    def __getitem__(self, idx):
+        if idx < len(self.symbols):
+            return self.symbols[idx]
+        return self.unk_word
+
+    def __len__(self):
+        """Returns the number of symbols in the dictionary"""
+        return len(self.symbols)
+
+    def index(self, sym):
+        """Returns the index of the specified symbol"""
+        if sym in self.indices:
+            return self.indices[sym]
+        return self.unk_index
+
+    def pad(self):
+        """Helper to get index of pad symbol"""
+        return self.pad_index
+
+    def eos(self):
+        """Helper to get index of end-of-sentence symbol"""
+        return self.eos_index
+
+    def unk(self):
+        """Helper to get index of unk symbol"""
+        return self.unk_index
+
+    def add_symbol(self, word, n=1):
+        """Adds a word to the dictionary"""
+        if word in self.indices:
+            idx = self.indices[word]
+            self.count[idx] = self.count[idx] + n
+            return idx
+        else:
+            idx = len(self.symbols)
+            self.indices[word] = idx
+            self.symbols.append(word)
+            self.count.append(n)
+            return idx
+
+    @classmethod
+    def load(cls, audio_features=0):
+        """Loads the dictionary from a text file with the format:
+
+        ```
+        <symbol0> <count0>
+        <symbol1> <count1>
+        ...
+        ```
+        """
+
+        d = cls()
+        return d
+
+    def save(self, f):
+        """Stores dictionary into a text file"""
+        if isinstance(f, str):
+            os.makedirs(os.path.dirname(f), exist_ok=True)
+            with open(f, 'w', encoding='utf-8') as fd:
+                return self.save(fd)
+        for symbol, count in zip(self.symbols[self.nspecial:], self.count[self.nspecial:]):
+            print('{} {}'.format(symbol, count), file=f)
+
+    def dummy_sentence(self, length):
+        t = torch.Tensor(length).new_empty((length, self.audio_features)).uniform_(0, 1)
+        return t
+
+    def string(self, tensor, bpe_symbol=None, escape_unk=False):
+        """
+        Cannot write the source when it is audio
+        """
+        return "AUDIO"

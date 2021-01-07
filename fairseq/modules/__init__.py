@@ -13,9 +13,9 @@ from .conv_tbc import ConvTBC
 from .downsampled_multihead_attention import DownsampledMultiHeadAttention
 from .grad_multiply import GradMultiply
 from .highway import Highway
-from .learned_positional_embedding import LearnedPositionalEmbedding
+from .learned_positional_embedding import LearnedPositionalEmbedding, PositionalEmbeddingAudio
 from .linearized_convolution import LinearizedConvolution
-from .multihead_attention import MultiheadAttention
+from .multihead_attention import MultiheadAttention,LocalMultiheadAttention,ConvAttention2D
 from .scalar_bias import ScalarBias
 from .sinusoidal_positional_embedding import SinusoidalPositionalEmbedding
 
@@ -33,4 +33,7 @@ __all__ = [
     'MultiheadAttention',
     'ScalarBias',
     'SinusoidalPositionalEmbedding',
+    'LocalMultiheadAttention',
+    'ConvAttention2D',
+    'PositionalEmbeddingAudio'
 ]

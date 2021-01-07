@@ -33,6 +33,7 @@ def main(args):
 
     key = args.source_lang + '-' + args.target_lang
 
+    args.skip_invalid_size_inputs_valid_test = None
     # Load dataset splits
     task = tasks.setup_task(args)
     task.load_dataset(args.gen_subset)
@@ -42,13 +43,21 @@ def main(args):
     src_dict = task.source_dictionary
     tgt_dict = task.target_dictionary
 
-
+    print("BEFORE LOADING THE MODEL", args.skip_invalid_size_inputs_valid_test)
     # Load ensemble
     print('| loading model(s) from {}'.format(args.path))
-    args.model_overrides = {'lang_pairs':[key]}
+    if 'speech' in args.task:
+        args.model_overrides = {'lang_pairs':[key],
+                                'max_source_positions':args.max_source_positions, 
+                                'max_target_positions':args.max_target_positions}
+    else:
+
+        args.model_overrides = {'lang_pairs':[key]}
+
     #models, _ = utils.load_ensemble_for_inference(args.path.split(':'), task, model_arg_overrides=eval(args.model_overrides),pair=key)
     models, _ = utils.load_ensemble_for_inference(args.path.split(':'), task, model_arg_overrides=args.model_overrides,pair=key)
 
+    print("AFTER LOADING THE MODEL", args.skip_invalid_size_inputs_valid_test)
     for model in models:
         model.keys = [key]
 
