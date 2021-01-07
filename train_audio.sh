@@ -1,10 +1,19 @@
+#!/bin/bash
+
+
+#SBATCH -p veu # Partition to submit to
+#SBATCH --gres=gpu:1
+#SBATCH --mem=30G # Memory
+#SBATCH --ignore-pbs                                                            
+#SBATCH --output=train_scratch_enen_adapt.log
+
 
 DEST_DIR='data-bin/audio-enen-melspec'
-CP_DIR='checkpoints/asr_en_scratch_melspec-3conv'
+CP_DIR='checkpoints/asr_en_enfr_scratch_melspec-3conv'
 
 mkdir -p $CP_DIR
 
-CUDA_VISIBLE_DEVICES=2 python train.py $DEST_DIR  \
+python train.py $DEST_DIR  \
     --clip-norm 20.0 \
     --max-sentences 8 \
     --max-tokens 12000 \
@@ -29,4 +38,10 @@ CUDA_VISIBLE_DEVICES=2 python train.py $DEST_DIR  \
     --freeze-schedule n-n \
     --label-smoothing 0.1 \
     --no-cache-source \
-    --audio-features 40
+    --audio-features 40 \
+    --encoder-normalize-before \
+    --decoder-normalize-before \
+    --final-norm
+    --adapter-network \
+    --adapter-size 4096 \
+    --adapter-attn-layers 0 \

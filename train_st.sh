@@ -1,13 +1,22 @@
+#!/bin/bash
 
-DEST_DIR='data-bin/audio-ende-melspec'
-CP_DIR='checkpoints/st_de_melspec_scratch_adapt'
-PREV_ENC_DIR='checkpoints/asr_en_scratch_melspec-3conv'
-PREV_DEC_DIR='checkpoints/europarl-basic-tied-normalize'
+
+#SBATCH -p veu # Partition to submit to
+#SBATCH --gres=gpu:1
+#SBATCH --mem=30G # Memory
+#SBATCH --ignore-pbs                                                            
+#SBATCH --output=train_scratch_st_enes_adapt.log
+
+
+DEST_DIR='data-bin/audio-enes'
+CP_DIR='checkpoints/st_es_scratch_adapt'
+PREV_ENC_DIR='checkpoints/asr_en_enes_scratch_melspec-3conv'
+PREV_DEC_DIR='/scratch/carlos/europarl-basic-tied-normalize'
 
 
 mkdir -p $CP_DIR
 
-CUDA_VISIBLE_DEVICES=3 python add_audio.py $DEST_DIR \
+python add_audio.py $DEST_DIR \
     --clip-norm 20.0 \
     --max-sentences 8 \
     --max-tokens 12000 \
@@ -31,13 +40,13 @@ CUDA_VISIBLE_DEVICES=3 python add_audio.py $DEST_DIR \
     --criterion label_smoothed_cross_entropy \
     --label-smoothing 0.1 \
     --enckey ens-en \
-    --deckey en-de \
-    --newkey ens-de \
+    --deckey en-es \
+    --newkey ens-es \
     --reuse encoder \
     --prev-enc-model $PREV_ENC_DIR \
     --prev-dec-model $PREV_DEC_DIR \
      --reset-optimizer \
-    --lang-pairs ens-de \
+    --lang-pairs ens-es \
     --restore-file checkpoint_best.pt \
     --freeze-schedule n-n \
     --no-cache-source \
