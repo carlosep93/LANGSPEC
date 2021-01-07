@@ -42,8 +42,10 @@ def main(args):
     # Set dictionaries
     src_dict = task.source_dictionary
     tgt_dict = task.target_dictionary
-
-    key = args.source_lang + '-' + args.target_lang
+    
+    key = None
+    if args.task != 'translation':
+        key = args.source_lang + '-' + args.target_lang
 
     # Load ensemble
     print('| loading model(s) from {}'.format(args.path))

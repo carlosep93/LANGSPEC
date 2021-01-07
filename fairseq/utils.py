@@ -117,7 +117,7 @@ def get_nli_encoder(model,key,filename,tag):
         state['model'] = OrderedDict({k.replace('encoder',tag):v for k,v in state['model'].items() if 'encoder.' in k})
     for k,v in state['model'].items():
         current_state[k] = v
-    model.load_state_dict(current_state)
+    model.load_state_dict(current_state,strict=False)
     model.upgrade_state_dict(state['model'])
 
 
@@ -199,7 +199,7 @@ def load_model_state(filename, model):
 
     # load model parameters
     try:
-        model.load_state_dict(state['model'], strict=True)
+        model.load_state_dict(state['model'], strict=False)
     except Exception:
         raise Exception('Cannot load model parameters from checkpoint, '
                         'please ensure that the architectures match')
@@ -339,7 +339,7 @@ def load_nli_model_for_inference(path,task, model_arg_overrides=None,pair=None):
     args = state['args']
 
     model = task.build_model(args)
-    model.load_state_dict(state['model'], strict=True)
+    model.load_state_dict(state['model'], strict=False)
     model.upgrade_state_dict(state['model'])
 
     return model
@@ -354,12 +354,15 @@ def load_ensemble_for_inference(filenames, task, model_arg_overrides=None,pair=N
     # load model architectures and weights
     states = []
     for filename in filenames:
+        print('loading new filename', filename)
         if not os.path.exists(filename):
             raise IOError('Model file not found: {}'.format(filename))
         state = torch.load(filename, map_location=lambda s, l: default_restore_location(s, 'cpu'))
         state = _upgrade_state_dict(state)
+        print(list(state['model'].keys()))
         if pair:
             state['model'] = OrderedDict({k:v for k,v in state['model'].items() if pair in k})
+        print(list(state['model'].keys()))
         states.append(state)
 
     ensemble = []

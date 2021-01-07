@@ -43,7 +43,7 @@ class SequenceEncoder(object):
         """Iterate over a batched dataset and yield scored translations."""
         for sample in data_itr:
             s = utils.move_to_cuda(sample) if cuda else sample
-            s = self.pad_sample(s,max_length)
+            #s = self.pad_sample(s,max_length)
             if timer is not None:
                 timer.start()
             encodings = self.encode(s)
@@ -89,8 +89,10 @@ class SequenceEncoder(object):
         for model in self.models:
             with torch.no_grad():
                 model.eval()
-                sample = self.pad_sample_interactive(sample,maxlength)
+                #sample = self.pad_sample_interactive(sample,maxlength)
                 encoder_out = model.encoder.forward(**sample)
+                if isinstance(encoder_out['encoder_out'],tuple):
+                    encoder_out['encoder_out'] = encoder_out['encoder_out'][0]
                 encoder_out['encoder_out'] = encoder_out['encoder_out'].permute(1,0,2)
                 #attn = decoder_out[1]
 

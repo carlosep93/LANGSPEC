@@ -89,6 +89,7 @@ def filter_by_size(indices, size_fn, max_positions, raise_exception=False):
             return size_fn(idx) <= max_positions
         elif isinstance(max_positions, dict):
             idx_size = size_fn(idx)
+            print(idx_size,type(idx_size))
             assert isinstance(idx_size, dict)
             intersect_keys = set(max_positions.keys()) & set(idx_size.keys())
             return all(
