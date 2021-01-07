@@ -255,15 +255,26 @@ class Trainer(object):
         return extra_state
 
 
-    def load_partial_audio_checkpoint(self,enc_file,dec_file,enckey,deckey,newkey,reuse,reset_optimizer=False, reset_lr_scheduler=False, optimizer_overrides=None, finetune=False,path=None):
+    def load_partial_audio_checkpoint(self,
+                                    enc_files,
+                                    dec_files,
+                                    enckeys,
+                                    deckeys,
+                                    newkeys,
+                                    reuse,
+                                    reset_optimizer=False, 
+                                    reset_lr_scheduler=False, 
+                                    optimizer_overrides=None, 
+                                    finetune=False,path=None):
+
         """Load all training state from a checkpoint file."""
         extra_state, self._optim_history, last_optim_state = \
-            utils.load_partial_audio_model_state(enc_file,
-                                                 dec_file,
+            utils.load_partial_audio_model_state(enc_files,
+                                                 dec_files,
                                                  self.get_model(),
-                                                 enckey,
-                                                 deckey,
-                                                 newkey,
+                                                 enckeys,
+                                                 deckeys,
+                                                 newkeys,
                                                  reuse)
 
         if last_optim_state is not None and not reset_optimizer:

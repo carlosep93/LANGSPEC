@@ -432,11 +432,11 @@ def finetune_args(parser):
 
 def add_audio_args(parser):
     group = parser.add_argument_group('AddAudio')
-    group.add_argument('--enckey', default='en-en',type=str, help='Key in pretrained encoder model')
-    group.add_argument('--deckey', default='en-en',type=str, help='Key in pretrained decoder model')
-    group.add_argument('--newkey', default='en-en',type=str, help='Key in new model')
-    group.add_argument('--prev-enc-model',default='',type=str, help='Path to previous encoder model')
-    group.add_argument('--prev-dec-model',default='',type=str, help='Path to previous decoder model')
+    group.add_argument('--enckeys', nargs='+', default='',type=str, help='Key in pretrained encoder model')
+    group.add_argument('--deckeys', nargs='+', default='',type=str, help='Key in pretrained decoder model')
+    group.add_argument('--newkeys', nargs='+', default='',type=str, help='Key in new model')
+    group.add_argument('--prev-enc-models', nargs='+', default='',type=str, help='Path to previous encoder model')
+    group.add_argument('--prev-dec-models', nargs='+', default='',type=str, help='Path to previous decoder model')
     group.add_argument('--reuse',default='encoder',type=str, help='Which part of the previous model to use', choices=['encoder','decoder','both'])
 
 def add_lang_args(parser):

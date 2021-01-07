@@ -163,26 +163,27 @@ def load_partial_unsup_model_state(enc_filename,dec_filename,pivot_filename ,mod
     return enc_state['extra_state'], enc_state['optimizer_history'], enc_state['last_optimizer_state']
 
 
-def load_partial_audio_model_state(enc_file,dec_file, model,enckey,deckey,newkey,reuse,path=None):
-    if not os.path.exists(enc_file) or not os.path.exists(dec_file):
-        return None, [], None
-    
-    enc_state = torch.load(enc_file, map_location=lambda s, l: default_restore_location(s, 'cpu'))
-    enc_state = _upgrade_state_dict(enc_state)
-    
-    dec_state = torch.load(dec_file, map_location=lambda s, l: default_restore_location(s, 'cpu'))
-    dec_state = _upgrade_state_dict(dec_state)
+def load_partial_audio_model_state(enc_files,dec_files, model,enckeys,deckeys,newkeys,reuse,path=None):
     model_state = OrderedDict()
+    enc_state = None
+    for enc_file, dec_file, enckey, deckey,newkey in zip(enc_files, dec_files, enckeys, deckeys, newkeys):
+        if not os.path.exists(enc_file) or not os.path.exists(dec_file):
+            return None, [], None
+        enc_state = torch.load(enc_file, map_location=lambda s, l: default_restore_location(s, 'cpu'))
+        enc_state = _upgrade_state_dict(enc_state)
     
-    if reuse in ['encoder','both']:
-        model_state.update(OrderedDict({k.replace(enckey,newkey):v for k,v in enc_state['model'].items() if enckey + '.encoder' in k}))
-        print('Encoder params', enc_file, len(model_state),enckey,newkey)
-    if reuse in ['decoder','both']:
-        model_state.update(OrderedDict({k.replace(deckey,newkey):v for k,v in dec_state['model'].items() if deckey + '.decoder' in k}))
-        print('Decoder params', dec_file,  len(model_state),deckey,newkey)
+        dec_state = torch.load(dec_file, map_location=lambda s, l: default_restore_location(s, 'cpu'))
+        dec_state = _upgrade_state_dict(dec_state)
+    
+        if reuse in ['encoder','both']:
+            model_state.update(OrderedDict({k.replace(enckey,newkey):v for k,v in enc_state['model'].items() if enckey + '.encoder' in k}))
+            print('Encoder params', enc_file, len(model_state),enckey,newkey)
+        if reuse in ['decoder','both']:
+            model_state.update(OrderedDict({k.replace(deckey,newkey):v for k,v in dec_state['model'].items() if deckey + '.decoder' in k}))
+            print('Decoder params', dec_file,  len(model_state),deckey,newkey)
     
     enc_state['model'] = OrderedDict(model_state)
-    print('LOAD PARTIAL MODEL', enckey, deckey,newkey,reuse, len(enc_state['model']))
+    print('LOAD PARTIAL MODEL', enckeys, deckeys ,newkeys,reuse, len(enc_state['model']))
     model.upgrade_state_dict(enc_state['model'])
     model_keys =  list(model.state_dict().keys())
     print('keys in model not in checkpoint')

@@ -121,9 +121,10 @@ class SpeechInterlinguaTranslationTask(FairseqTask):
             dicts[speech] = AudioDictionary.load(os.path.join(args.data[0], 'dict.{}.txt'.format(speech)))
             dicts[lang] = Dictionary.load(os.path.join(args.data, 'dict.{}.txt'.format(lang)))
             if len(dicts) > 0:
-                assert dicts[lang].pad() == dicts[langs[0]].pad()
-                assert dicts[lang].eos() == dicts[langs[0]].eos()
-                assert dicts[lang].unk() == dicts[langs[0]].unk()
+                l = list(dicts.keys())[0]
+                assert dicts[lang].pad() == dicts[l].pad()
+                assert dicts[lang].eos() == dicts[l].eos()
+                assert dicts[lang].unk() == dicts[l].unk()
             print('| [{}] dictionary: {} types'.format(speech, len(dicts[speech])))
             print('| [{}] dictionary: {} types'.format(lang, len(dicts[lang])))
 

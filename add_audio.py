@@ -105,22 +105,29 @@ def main(args):
     print('| done training in {:.1f} seconds'.format(train_meter.sum))
 
 
-
-
+def check_files_exist(file_list):
+    for f in file_list:
+        if not os.path.isfile(f):
+            print('File not found', f)
+            exit(0)
+            return False
+    return True
 
 def load_previous_model(args, trainer):
     """Load a checkpoint and replay dataloader to match."""
     print('LOADING PREV MODEL')
     os.makedirs(args.save_dir, exist_ok=True)
-    enc_checkpoint_path = os.path.join(args.prev_enc_model, args.restore_file)
-    dec_checkpoint_path = os.path.join(args.prev_dec_model, args.restore_file)
-    if os.path.isfile(enc_checkpoint_path) and os.path.isfile(dec_checkpoint_path):
+    print(args.prev_enc_models), args.prev_dec_models
+    enc_checkpoint_paths = [os.path.join(model, args.restore_file) for model in args.prev_enc_models[0].split(',')]
+    dec_checkpoint_paths = [os.path.join(model, args.restore_file) for model in args.prev_dec_models[0].split(',')]
+    print(args.restore_file, enc_checkpoint_paths, dec_checkpoint_paths) 
+    if check_files_exist(enc_checkpoint_paths)  and check_files_exist(dec_checkpoint_paths):
         print('PATHS EXIST')
-        trainer.load_partial_audio_checkpoint(enc_checkpoint_path,
-                                        dec_checkpoint_path,
-                                        args.enckey,
-                                        args.deckey, 
-                                        args.newkey, 
+        trainer.load_partial_audio_checkpoint(enc_checkpoint_paths,
+                                        dec_checkpoint_paths,
+                                        args.enckeys[0].split(','),
+                                        args.deckeys[0].split(','),
+                                        args.newkeys[0].split(','), 
                                         args.reuse, 
                                         args.reset_optimizer, 
                                         args.reset_lr_scheduler,
