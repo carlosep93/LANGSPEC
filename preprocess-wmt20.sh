@@ -68,17 +68,17 @@ preprocess() {
 
 
 
-dest_dir="data-bin/wmt20"
+dest_dir="data-bin/wmt20-indic"
 n_op=16000
 
-ta_train="/home/usuaris/veu/cescola/wmt20/ta-en/par/processed/train.tc.ta"
-en_train="/home/usuaris/veu/cescola/wmt20/ta-en/par/processed/train.tc.en"
+ta_train="/home/usuaris/veu/cescola/wmt20/ta-en/par/processed-indic-nlp/train.tc.ta"
+en_train="/home/usuaris/veu/cescola/wmt20/ta-en/par/processed-indic-nlp/train.tc.en"
 
-ta_valid="/home/usuaris/veu/cescola/wmt20/ta-en/par/processed/valid.tc.ta"
-en_valid="/home/usuaris/veu/cescola/wmt20/ta-en/par/processed/valid.tc.en"
+ta_valid="/home/usuaris/veu/cescola/wmt20/ta-en/par/processed-indic-nlp/valid.tc.ta"
+en_valid="/home/usuaris/veu/cescola/wmt20/ta-en/par/processed-indic-nlp/valid.tc.en"
 
-ta_test="/home/usuaris/veu/cescola/wmt20/ta-en/par/processed/test.tc.ta"
-en_test="/home/usuaris/veu/cescola/wmt20/ta-en/par/processed/test.tc.en"
+ta_test="/home/usuaris/veu/cescola/wmt20/ta-en/par/processed-indic-nlp/test.tc.ta"
+en_test="/home/usuaris/veu/cescola/wmt20/ta-en/par/processed-indic-nlp/test.tc.en"
 
 mkdir $dest_dir
 
@@ -106,7 +106,7 @@ subword-nmt apply-bpe -c  $dest_dir/en.codes < $en_test  >  $dest_dir/test.bpe.e
 
 # GET TA DICTIONARY
 
-ta_array=("data-bin/wmt20/train.bpe.ta")
+ta_array=("data-bin/wmt20-indic/train.bpe.ta")
 
 get_dictionary $dest_dir/dict.ta.txt $n_op "${ta_array[@]}"
 

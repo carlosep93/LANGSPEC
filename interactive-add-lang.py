@@ -42,8 +42,7 @@ def make_batches(lines, args, task, max_positions):
     ]
     lengths = np.array([t.numel() for t in tokens])
     itr = task.get_batch_iterator(
-        dataset=task.build_dataset(tokens, lengths, task.source_dictionary) if 'build_dataset' in dir(task) else \
-                data.LanguagePairDataset(tokens, lengths, task.source_dictionary),
+        dataset=data.LanguagePairDataset(tokens, lengths, task.source_dictionary),
         max_tokens=args.max_tokens,
         max_sentences=args.max_sentences,
         max_positions=max_positions,
@@ -74,12 +73,12 @@ def main(args):
     # Setup task, e.g., translation
     task = tasks.setup_task(args)
 
+    key = args.source_lang + '-' + args.target_lang
+    
     # Load ensemble
     print('| loading model(s) from {}'.format(args.path))
     model_paths = args.path.split(':')
     #models, model_args = utils.load_ensemble_for_inference(model_paths, task, model_arg_overrides=eval(args.model_overrides))
-
-    key = args.source_lang + '-' + args.target_lang
     models, _ = utils.load_partial_model_for_inference(args.enc_model,
                                                        args.enc_key,
                                                        args.dec_model,
@@ -91,9 +90,11 @@ def main(args):
                                                        model_arg_overrides=eval(args.model_overrides),
                                                        pair=key)
 
-
     for model in models:
         model.keys = [key]
+
+
+
 
     # Set dictionaries
     tgt_dict = task.target_dictionary
@@ -101,7 +102,7 @@ def main(args):
     # Optimize ensemble for generation
     for model in models:
         model.make_generation_fast_(
-            beamable_mm_beam_size=None if args.no_beamable_mm else args.beam,
+            beamable_mm_beam_size=none if args.no_beamable_mm else args.beam,
             need_attn=args.print_alignment,
         )
         if args.fp16:
@@ -169,12 +170,15 @@ def main(args):
         )
 
         return [make_result(batch.srcs[i], t) for i, t in enumerate(translations)]
-
+    '''
     max_positions = utils.resolve_max_positions(
         task.max_positions(),
         *[model.max_positions() for model in models]
     )
+    '''
+    max_positions = (1024,1024)
 
+    print('MAX POSITIONS', max_positions)
     if args.buffer_size > 1:
         print('| Sentence buffer size:', args.buffer_size)
     print('| Type the input sentence and press return:')
@@ -196,6 +200,7 @@ def main(args):
 
 
 if __name__ == '__main__':
+    #parser = options.get_generation_parser(interactive=True)
     parser = options.get_generation_add_lang_parser(interactive=True)
     args = options.parse_args_and_arch(parser)
     main(args)

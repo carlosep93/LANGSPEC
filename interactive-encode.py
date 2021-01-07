@@ -119,27 +119,7 @@ def main(args):
 
     if use_cuda:
         encoder.cuda()
-    '''
-    # Generate and compute BLEU score
-    num_sentences = 0
-    has_target = True
-    with progress_bar.build_progress_bar(args, itr) as t:
-        encodings = encoder.encode_batched_itr(t, cuda=use_cuda, timer=gen_timer)
-        data = {}
-        i = 0
-        for id,src,ref,hypos in encodings:
-            if i >= args.n_points:
-                break
-            data[str(id.cpu().data.numpy())] = {
-                'src':src.cpu().data.numpy().tolist(),
-                'ref':ref.cpu().data.numpy().tolist(),
-                'encoding':hypos[0]['encoding'].cpu().data.numpy().tolist()
-            }
-            i += 1
-    with open(args.output_file,'w') as f:
-        json.dump(data,f)
-    print('Done')
-    '''
+    
     max_positions = utils.resolve_max_positions(
         task.max_positions(),
         *[model.max_positions() for model in models]
@@ -167,87 +147,11 @@ def main(args):
             }
             current_idx += 1
 
-    print(current_idx)
+    print(current_idx, len(data))
     with open(args.output_file,'w') as f:
         json.dump(data,f)
     print('Done')
-    '''
-    # Load alignment dictionary for unknown word replacement
-    # (None if no unknown word replacement, empty if no path to align dictionary)
-    align_dict = utils.load_align_dict(args.replace_unk)
-
-    def make_result(src_str, hypos):
-        result = Translation(
-            src_str='O\t{}'.format(src_str),
-            hypos=[],
-            pos_scores=[],
-            alignments=[],
-        )
-
-        # Process top predictions
-        for hypo in hypos[:min(len(hypos), args.nbest)]:
-            hypo_tokens, hypo_str, alignment = utils.post_process_prediction(
-                hypo_tokens=hypo['tokens'].int().cpu(),
-                src_str=src_str,
-                alignment=hypo['alignment'].int().cpu() if hypo['alignment'] is not None else None,
-                align_dict=align_dict,
-                tgt_dict=tgt_dict,
-                remove_bpe=args.remove_bpe,
-            )
-            result.hypos.append('H\t{}\t{}'.format(hypo['score'], hypo_str))
-            result.pos_scores.append('P\t{}'.format(
-                ' '.join(map(
-                    lambda x: '{:.4f}'.format(x),
-                    hypo['positional_scores'].tolist(),
-                ))
-            ))
-            result.alignments.append(
-                'A\t{}'.format(' '.join(map(lambda x: str(utils.item(x)), alignment)))
-                if args.print_alignment else None
-            )
-        return result
-
-    def process_batch(batch):
-        tokens = batch.tokens
-        lengths = batch.lengths
-
-        if use_cuda:
-            tokens = tokens.cuda()
-            lengths = lengths.cuda()
-
-        encoder_input = {'src_tokens': tokens, 'src_lengths': lengths}
-        translations = translator.generate(
-            encoder_input,
-            maxlen=int(args.max_len_a * tokens.size(1) + args.max_len_b),
-        )
-
-        return [make_result(batch.srcs[i], t) for i, t in enumerate(translations)]
-
-    max_positions = utils.resolve_max_positions(
-        task.max_positions(),
-        *[model.max_positions() for model in models]
-    )
-
-    if args.buffer_size > 1:
-        print('| Sentence buffer size:', args.buffer_size)
-    print('| Type the input sentence and press return:')
-    for inputs in buffered_read(args.buffer_size):
-        indices = []
-        results = []
-        for batch, batch_indices in make_batches(inputs, args, task, max_positions):
-            indices.extend(batch_indices)
-            results += process_batch(batch)
-
-        for i in np.argsort(indices):
-            result = results[i]
-            print(result.src_str)
-            for hypo, pos_scores, align in zip(result.hypos, result.pos_scores, result.alignments):
-                print(hypo)
-                print(pos_scores)
-                if align is not None:
-                    print(align)
-    '''
-
+    
 if __name__ == '__main__':
     parser = options.get_generation_add_lang_parser(interactive=True)
     options.add_encode_args(parser)

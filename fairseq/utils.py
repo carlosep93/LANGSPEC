@@ -117,12 +117,12 @@ def get_nli_encoder(model,key,filename,tag):
         state['model'] = OrderedDict({k.replace('encoder',tag):v for k,v in state['model'].items() if 'encoder.' in k})
     for k,v in state['model'].items():
         current_state[k] = v
-    model.load_state_dict(current_state)
+    model.load_state_dict(current_state,strict=False)
     model.upgrade_state_dict(state['model'])
 
 
-def load_partial_unsup_model_state(enc_filename,dec_filename,pivot_filename ,model,keys,pivotkeys,newkeys,path=None):
-    if not os.path.exists(enc_filename) or not os.path.exists(dec_filename) or not os.path.exists(pivot_filename):
+def load_partial_unsup_model_state(enc_filename,dec_filename,pivot_enc_filename,pivot_dec_filename,model,keys,pivotkeys,newkeys,path=None):
+    if not os.path.exists(enc_filename) or not os.path.exists(dec_filename) or not os.path.exists(pivot_enc_filename) or not os.path.exists(pivot_dec_filename):
         return None, [], None
     enc_state = torch.load(enc_filename, map_location=lambda s, l: default_restore_location(s, 'cpu'))
     enc_state = _upgrade_state_dict(enc_state)
@@ -130,9 +130,12 @@ def load_partial_unsup_model_state(enc_filename,dec_filename,pivot_filename ,mod
     dec_state = torch.load(dec_filename, map_location=lambda s, l: default_restore_location(s, 'cpu'))
     dec_state = _upgrade_state_dict(dec_state)
 
-    pivot_state = torch.load(pivot_filename, map_location=lambda s, l: default_restore_location(s, 'cpu'))
-    pivot_state = _upgrade_state_dict(pivot_state)
+    pivot_enc_state = torch.load(pivot_enc_filename, map_location=lambda s, l: default_restore_location(s, 'cpu'))
+    pivot_enc_state = _upgrade_state_dict(pivot_enc_state)
 
+    pivot_dec_state = torch.load(pivot_dec_filename, map_location=lambda s, l: default_restore_location(s, 'cpu'))
+    pivot_dec_state = _upgrade_state_dict(pivot_dec_state)
+    
     model_state = OrderedDict()
     pivot_model_state = OrderedDict()
     for key, newkey, pivotkey in zip(keys,newkeys,pivotkeys):
@@ -143,8 +146,8 @@ def load_partial_unsup_model_state(enc_filename,dec_filename,pivot_filename ,mod
         model_state.update(OrderedDict({k.replace(rev_key,newkey):v for k,v in dec_state['model'].items() if rev_key + '.decoder' in k}))
         print('Model state after loading decoder', len(model_state))
         rev_pkey = pivotkey.split('-')[1] + '-' + pivotkey.split('-')[0]
-        pivot_model_state.update(OrderedDict({k.replace(pivotkey + '.encoder',newkey + '.pivot_encoder'):v for k,v in pivot_state['model'].items() if pivotkey + '.encoder' in k}))
-        pivot_model_state.update(OrderedDict({k.replace(rev_pkey + '.decoder',newkey + '.pivot_decoder'):v for k,v in pivot_state['model'].items() if rev_pkey + '.decoder' in k}))
+        pivot_model_state.update(OrderedDict({k.replace(pivotkey + '.encoder',newkey + '.pivot_encoder'):v for k,v in pivot_enc_state['model'].items() if pivotkey + '.encoder' in k}))
+        pivot_model_state.update(OrderedDict({k.replace(rev_pkey + '.decoder',newkey + '.pivot_decoder'):v for k,v in pivot_dec_state['model'].items() if rev_pkey + '.decoder' in k}))
     
     print('Original enc state', len(enc_state['model']))
     print('Model state params', len(model_state))
@@ -252,7 +255,7 @@ def load_model_state(filename, model):
 
     # load model parameters
     try:
-        model.load_state_dict(state['model'], strict=True)
+        model.load_state_dict(state['model'], strict=False)
     except Exception:
         raise Exception('Cannot load model parameters from checkpoint, '
                         'please ensure that the architectures match')
@@ -392,7 +395,7 @@ def load_nli_model_for_inference(path,task, model_arg_overrides=None,pair=None):
     args = state['args']
 
     model = task.build_model(args)
-    model.load_state_dict(state['model'], strict=True)
+    model.load_state_dict(state['model'], strict=False)
     model.upgrade_state_dict(state['model'])
 
     return model
@@ -407,12 +410,15 @@ def load_ensemble_for_inference(filenames, task, model_arg_overrides=None,pair=N
     # load model architectures and weights
     states = []
     for filename in filenames:
+        print('loading new filename', filename)
         if not os.path.exists(filename):
             raise IOError('Model file not found: {}'.format(filename))
         state = torch.load(filename, map_location=lambda s, l: default_restore_location(s, 'cpu'))
         state = _upgrade_state_dict(state)
+        print(list(state['model'].keys()))
         if pair:
             state['model'] = OrderedDict({k:v for k,v in state['model'].items() if pair in k})
+        print(list(state['model'].keys()))
         states.append(state)
 
     ensemble = []

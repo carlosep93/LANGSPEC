@@ -453,7 +453,8 @@ def add_unsup_args(parser):
     group.add_argument('--newkeys', nargs='+',type=str, help='Keys  in new  unsupervised model')
     group.add_argument('--prev-enc-model',default='',type=str, help='Path to previous model')
     group.add_argument('--prev-dec-model',default='',type=str, help='Path to previous model')
-    group.add_argument('--pivot-prev-model',default='',type=str, help='Path to previous model for pivot languages')
+    group.add_argument('--pivot-prev-enc-model',default='',type=str, help='Path to previous model for pivot encoder languages')
+    group.add_argument('--pivot-prev-dec-model',default='',type=str, help='Path to previous model for pivot decoder languages')
     group.add_argument('--pivotkeys', nargs='+',type=str, help='Keys from the trained model to be used as pivots')
 
 
